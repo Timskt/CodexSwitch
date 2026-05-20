@@ -16,6 +16,7 @@ namespace CodexSwitch.Serialization;
 [JsonSerializable(typeof(ProviderConfig))]
 [JsonSerializable(typeof(ModelRouteConfig))]
 [JsonSerializable(typeof(ModelConversionConfig))]
+[JsonSerializable(typeof(CodexProviderSettings))]
 [JsonSerializable(typeof(ClaudeCodeProviderSettings))]
 [JsonSerializable(typeof(ProviderOAuthSettings))]
 [JsonSerializable(typeof(OAuthAccountConfig))]
@@ -35,8 +36,6 @@ namespace CodexSwitch.Serialization;
 [JsonSerializable(typeof(ModelsListResponse))]
 [JsonSerializable(typeof(ModelInfoResponse))]
 [JsonSerializable(typeof(CodexAuthFile))]
-[JsonSerializable(typeof(CodexConfigRestoreState))]
-[JsonSerializable(typeof(ClaudeCodeConfigRestoreState))]
 [JsonSerializable(typeof(GitHubReleaseResponse))]
 [JsonSerializable(typeof(GitHubReleaseAssetResponse))]
 internal sealed partial class CodexSwitchJsonContext : JsonSerializerContext;

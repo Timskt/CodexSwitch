@@ -136,6 +136,7 @@ public static class ProviderTemplateCatalog
         FastMode = true,
         ServiceTier = "priority",
         SupportsCodex = true,
+        SupportsWebSockets = true,
         OAuth = new ProviderOAuthSettings
         {
             AuthorizeUrl = "https://auth.openai.com/oauth/authorize",
@@ -220,6 +221,8 @@ public static class ProviderTemplateCatalog
             ServiceTier = template.ServiceTier,
             SupportsCodex = template.SupportsCodex,
             SupportsClaudeCode = template.SupportsClaudeCode,
+            SupportsWebSockets = template.SupportsWebSockets,
+            Codex = new CodexProviderSettings(),
             ClaudeCode = new ClaudeCodeProviderSettings
             {
                 Model = template.IsCustom ? "" : template.DefaultModel,
@@ -268,6 +271,8 @@ public static class ProviderTemplateCatalog
         provider.DefaultModel = seeded.DefaultModel;
         provider.SupportsCodex = seeded.SupportsCodex;
         provider.SupportsClaudeCode = seeded.SupportsClaudeCode;
+        provider.SupportsWebSockets = seeded.SupportsWebSockets;
+        provider.Codex = CloneCodex(seeded.Codex);
         provider.ClaudeCode = CloneClaudeCode(seeded.ClaudeCode);
         provider.ServiceTier = seeded.ServiceTier;
         provider.OAuth = seeded.OAuth;
@@ -383,6 +388,14 @@ public static class ProviderTemplateCatalog
         };
     }
 
+    private static CodexProviderSettings CloneCodex(CodexProviderSettings source)
+    {
+        return new CodexProviderSettings
+        {
+            EnableOneMillionContext = source.EnableOneMillionContext
+        };
+    }
+
     private static ModelConversionConfig CloneConversion(ModelConversionConfig source)
     {
         return new ModelConversionConfig
@@ -452,6 +465,8 @@ public sealed class ProviderTemplate
     public bool SupportsCodex { get; init; }
 
     public bool SupportsClaudeCode { get; init; }
+
+    public bool SupportsWebSockets { get; init; }
 
     public bool IsCustom { get; init; }
 

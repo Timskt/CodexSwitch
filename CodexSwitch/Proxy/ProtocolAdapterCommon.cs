@@ -296,7 +296,10 @@ internal static class ProtocolAdapterCommon
         }
 
         if (requestedValue.HasValue)
+        {
+            writer.WritePropertyName(propertyName);
             requestedValue.Value.WriteTo(writer);
+        }
     }
 
     private static string ResolveFastTier(ProviderConfig provider, ModelRouteConfig? model)

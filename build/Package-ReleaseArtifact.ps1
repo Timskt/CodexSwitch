@@ -228,6 +228,8 @@ function New-MacDmg {
     $appZipPath = Join-Path $OutputDirectory "CodexSwitch-v$Version-$RuntimeIdentifier.app.zip"
     $dmgSourcePath = Join-Path $OutputDirectory "CodexSwitch-$RuntimeIdentifier.dmgroot"
     $dmgBundlePath = Join-Path $dmgSourcePath "CodexSwitch.app"
+    $repositoryRoot = Get-RepositoryRoot
+    $iconSource = Join-Path (Join-Path (Join-Path $repositoryRoot "CodexSwitch") "Assets") "app.icns"
 
     Remove-Item -LiteralPath $bundlePath -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $artifactPath -Force -ErrorAction SilentlyContinue
@@ -236,6 +238,7 @@ function New-MacDmg {
     New-Item -ItemType Directory -Force -Path $macOsPath, $resourcesPath | Out-Null
 
     Copy-Item -Path (Join-Path $PublishDirectory "*") -Destination $macOsPath -Recurse -Force
+    Copy-Item -LiteralPath $iconSource -Destination (Join-Path $resourcesPath "CodexSwitch.icns") -Force
     Invoke-NativeTool -FilePath "chmod" -Arguments @("+x", (Join-Path $macOsPath "CodexSwitch"))
 
     $plist = @"
@@ -253,6 +256,8 @@ function New-MacDmg {
     <string>CodexSwitch</string>
     <key>CFBundleDisplayName</key>
     <string>CodexSwitch</string>
+    <key>CFBundleIconFile</key>
+    <string>CodexSwitch.icns</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

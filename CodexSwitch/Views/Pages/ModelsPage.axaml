@@ -7,10 +7,10 @@
              x:Class="CodexSwitch.Views.Pages.ModelsPage"
              x:Name="Root"
              x:DataType="vm:MainWindowViewModel">
-    <ScrollViewer>
-        <Grid Margin="24,12,24,24"
-              RowDefinitions="Auto,Auto,*"
-              RowSpacing="18">
+    <Grid Margin="24,12,24,24"
+          RowDefinitions="Auto,Auto,*"
+          RowSpacing="18"
+          ClipToBounds="True">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Spacing="4">
                     <ui:CsText Text="{i18n:Tr models.title}" Classes="title"/>
@@ -60,8 +60,10 @@
                 </Grid>
             </ui:CsPanel>
 
-            <ui:CsPanel Grid.Row="2" Padding="0">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+        <ui:CsPanel Grid.Row="2" Padding="0">
+            <Grid RowDefinitions="*">
+                <ScrollViewer Grid.Row="0"
+                              HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled">
                     <ui:CsTable MinWidth="860">
                         <Grid RowDefinitions="Auto,*">
@@ -79,8 +81,37 @@
                                 </Grid>
                             </ui:CsTableHeader>
 
-                            <ItemsControl Grid.Row="1" ItemsSource="{Binding ModelCatalogRows}">
-                                <ItemsControl.ItemTemplate>
+                            <ListBox Grid.Row="1"
+                                     ItemsSource="{Binding ModelCatalogRows}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Padding="0"
+                                     SelectionMode="Single"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox.Styles>
+                                    <Style Selector="ListBoxItem">
+                                        <Setter Property="Padding" Value="0"/>
+                                        <Setter Property="Margin" Value="0"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        <Setter Property="Focusable" Value="False"/>
+                                        <Setter Property="Template">
+                                            <ControlTemplate>
+                                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                  HorizontalAlignment="Stretch"/>
+                                            </ControlTemplate>
+                                        </Setter>
+                                    </Style>
+                                </ListBox.Styles>
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel/>
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                                <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:ModelCatalogItem">
                                         <ui:CsTableRow Classes="model-row">
                                             <Grid ColumnDefinitions="1.45*,1.7*,0.7*,0.78*,0.86*,0.7*,0.62*,112"
@@ -235,12 +266,12 @@
                                             </Grid>
                                         </ui:CsTableRow>
                                     </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </Grid>
                     </ui:CsTable>
                 </ScrollViewer>
-            </ui:CsPanel>
-        </Grid>
-    </ScrollViewer>
+            </Grid>
+        </ui:CsPanel>
+    </Grid>
 </UserControl>

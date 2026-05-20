@@ -1,15 +1,58 @@
-using System.Text;
+using System.Globalization;
 
 namespace CodexSwitch.Services;
 
 public sealed class CodexConfigWriter
 {
-    private const string BeginMarker = "# <codexswitch-managed>";
-    private const string EndMarker = "# </codexswitch-managed>";
     private const string ManagedProviderId = "meteor-ai";
     private const string ManagedProviderName = "meteor-ai";
     private const string ManagedModel = CodexSwitchDefaults.ManagedCodexModel;
     private const string DefaultInboundApiKey = "sk-codex";
+    private const int OneMillionContextWindowTokens = 1_000_000;
+    private const int OneMillionAutoCompactTokenLimit = 900_000;
+    private static readonly string[] RootManagedKeyOrder =
+    [
+        "model",
+        "model_provider",
+        "disable_response_storage",
+        "approval_policy",
+        "sandbox_mode",
+        "model_supports_reasoning_summaries",
+        "rmcp_client",
+        "model_reasoning_effort",
+        "model_context_window",
+        "model_auto_compact_token_limit",
+        "personality"
+    ];
+    private static readonly string[] ProviderManagedKeyOrder =
+    [
+        "name",
+        "base_url",
+        "wire_api",
+        "supports_websockets",
+        "requires_openai_auth"
+    ];
+    private static readonly string[] FeaturesManagedKeyOrder =
+    [
+        "unified_exec",
+        "shell_snapshot",
+        "steer",
+        "skills",
+        "powershell_utf8",
+        "collaboration_modes",
+        "fast_mode",
+        "multi_agent",
+        "responses_websockets_v2",
+        "terminal_resize_reflow",
+        "memories",
+        "external_migration",
+        "goals",
+        "prevent_idle_sleep"
+    ];
+    private static readonly string[] WindowsManagedKeyOrder =
+    [
+        "sandbox"
+    ];
     private const string FakeCodexAppAuthJson = """
 {
   "_note": "Fake Codex App auth fixture for local UI/schema testing only. These tokens are intentionally invalid and will not authenticate with OpenAI services.",
@@ -39,7 +82,6 @@ public sealed class CodexConfigWriter
     public void Apply(AppConfig config)
     {
         Directory.CreateDirectory(_paths.CodexDirectory);
-        CaptureOriginalsIfNeeded();
         WriteConfigToml(config);
         if (config.Proxy.UseFakeCodexAppAuth)
             WriteFakeAuthJson();
@@ -51,21 +93,8 @@ public sealed class CodexConfigWriter
 
     public void RestoreOriginal()
     {
-        if (!File.Exists(_paths.CodexRestoreStatePath))
-            return;
-
-        CodexConfigRestoreState? state;
-        using (var stream = File.OpenRead(_paths.CodexRestoreStatePath))
-        {
-            state = JsonSerializer.Deserialize(stream, CodexSwitchJsonContext.Default.CodexConfigRestoreState);
-        }
-
-        if (state is null)
-            return;
-
-        RestoreFile(_paths.CodexConfigPath, state.ConfigExisted, state.ConfigToml);
-        RestoreFile(_paths.CodexAuthPath, state.AuthExisted, state.AuthJson);
-        File.Delete(_paths.CodexRestoreStatePath);
+        ManagedFileBackup.RestoreOriginal(_paths.CodexConfigPath);
+        ManagedFileBackup.RestoreOriginal(_paths.CodexAuthPath);
     }
 
     private void WriteConfigToml(AppConfig config)
@@ -73,46 +102,8 @@ public sealed class CodexConfigWriter
         var existing = File.Exists(_paths.CodexConfigPath)
             ? File.ReadAllText(_paths.CodexConfigPath)
             : "";
-        var endpoint = EscapeToml(BuildClientEndpoint(config.Proxy));
-
-        var builder = new StringBuilder();
-        builder.AppendLine($"model = \"{ManagedModel}\"");
-        builder.AppendLine($"model_provider = \"{ManagedProviderId}\"");
-        builder.AppendLine("disable_response_storage = true");
-        builder.AppendLine("approval_policy = \"never\"");
-        builder.AppendLine("sandbox_mode = \"danger-full-access\"");
-        builder.AppendLine("model_supports_reasoning_summaries = true");
-        builder.AppendLine("rmcp_client = true");
-        builder.AppendLine("model_reasoning_effort = \"xhigh\"");
-        if (ShouldEnableOneMillionContext(config))
-            builder.AppendLine("model_context_window = 1000000");
-        builder.AppendLine("personality = \"friendly\"");
-        builder.AppendLine();
-        builder.AppendLine($"[model_providers.{ManagedProviderId}]");
-        builder.AppendLine($"name = \"{ManagedProviderName}\"");
-        builder.AppendLine($"base_url = \"{endpoint}\"");
-        builder.AppendLine("wire_api = \"responses\"");
-        builder.AppendLine("requires_openai_auth = true");
-        builder.AppendLine();
-        builder.AppendLine("[features]");
-        builder.AppendLine("unified_exec = true");
-        builder.AppendLine("shell_snapshot = true");
-        builder.AppendLine("steer = true");
-        builder.AppendLine("skills = true");
-        builder.AppendLine("powershell_utf8 = true");
-        builder.AppendLine("collaboration_modes = true");
-        builder.AppendLine("fast_mode = true");
-        builder.AppendLine("multi_agent = true");
-        builder.AppendLine("responses_websockets_v2 = true");
-        builder.AppendLine("terminal_resize_reflow = true");
-        builder.AppendLine("memories = true");
-        builder.AppendLine("external_migration = true");
-        builder.AppendLine("goals = true");
-        builder.AppendLine("prevent_idle_sleep = true");
-        builder.AppendLine("[windows]");
-        builder.AppendLine("sandbox = \"elevated\"");
-
-        WriteTextIfChanged(_paths.CodexConfigPath, builder.ToString(), existing);
+        var merged = MergeConfigToml(existing, config);
+        WriteTextIfChanged(_paths.CodexConfigPath, merged, existing);
     }
 
     private void WriteAuthJson(AppConfig config)
@@ -134,83 +125,338 @@ public sealed class CodexConfigWriter
         WriteTextIfChanged(_paths.CodexAuthPath, FakeCodexAppAuthJson + Environment.NewLine);
     }
 
-    private void CaptureOriginalsIfNeeded()
-    {
-        if (File.Exists(_paths.CodexRestoreStatePath))
-            return;
-
-        var state = new CodexConfigRestoreState
-        {
-            ConfigExisted = File.Exists(_paths.CodexConfigPath),
-            AuthExisted = File.Exists(_paths.CodexAuthPath)
-        };
-
-        if (state.ConfigExisted)
-        {
-            var configToml = File.ReadAllText(_paths.CodexConfigPath);
-            var withoutManagedBlock = RemoveManagedBlock(configToml);
-            if (string.Equals(withoutManagedBlock, configToml, StringComparison.Ordinal))
-            {
-                state.ConfigToml = configToml;
-            }
-            else
-            {
-                state.ConfigToml = withoutManagedBlock.TrimEnd();
-                if (!string.IsNullOrWhiteSpace(state.ConfigToml))
-                    state.ConfigToml += Environment.NewLine;
-                else
-                    state.ConfigExisted = false;
-            }
-        }
-
-        if (state.AuthExisted)
-            state.AuthJson = File.ReadAllText(_paths.CodexAuthPath);
-
-        var json = JsonSerializer.Serialize(state, CodexSwitchJsonContext.Default.CodexConfigRestoreState);
-        WriteTextAtomically(_paths.CodexRestoreStatePath, json + Environment.NewLine);
-    }
-
-    private static void RestoreFile(string path, bool existed, string content)
-    {
-        if (existed)
-        {
-            WriteTextAtomically(path, content);
-            return;
-        }
-
-        if (File.Exists(path))
-            File.Delete(path);
-    }
-
     private void RestoreOriginalAuthIfNeeded()
     {
-        if (!File.Exists(_paths.CodexRestoreStatePath))
-            return;
-
-        CodexConfigRestoreState? state;
-        using (var stream = File.OpenRead(_paths.CodexRestoreStatePath))
+        if (ManagedFileBackup.HasBackup(_paths.CodexAuthPath))
         {
-            state = JsonSerializer.Deserialize(stream, CodexSwitchJsonContext.Default.CodexConfigRestoreState);
+            ManagedFileBackup.CopyBackupToOriginal(_paths.CodexAuthPath);
+            return;
         }
 
-        if (state is null)
+        if (!File.Exists(_paths.CodexAuthPath))
             return;
 
-        RestoreFile(_paths.CodexAuthPath, state.AuthExisted, state.AuthJson);
+        var existing = File.ReadAllText(_paths.CodexAuthPath);
+        if (!ShouldPreserveCodexAppAuth(existing))
+        {
+            File.Delete(_paths.CodexAuthPath);
+            return;
+        }
+
+        ManagedFileBackup.EnsureBackedUp(_paths.CodexAuthPath);
+        ManagedFileBackup.CopyBackupToOriginal(_paths.CodexAuthPath);
     }
 
-    private static string RemoveManagedBlock(string text)
+    private static bool ShouldPreserveCodexAppAuth(string content)
     {
-        var begin = text.IndexOf(BeginMarker, StringComparison.Ordinal);
-        if (begin < 0)
-            return text;
+        if (string.IsNullOrWhiteSpace(content))
+            return false;
 
-        var end = text.IndexOf(EndMarker, begin, StringComparison.Ordinal);
-        if (end < 0)
-            return text[..begin];
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("auth_mode", out var authMode) ||
+                authMode.ValueKind != JsonValueKind.String ||
+                !string.Equals(authMode.GetString(), "chatgpt", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
 
-        end += EndMarker.Length;
-        return text.Remove(begin, end - begin);
+        return !content.Contains("Fake Codex App auth fixture", StringComparison.OrdinalIgnoreCase) &&
+            !content.Contains("fake-refresh-token-for-local-test-only", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string MergeConfigToml(string existing, AppConfig config)
+    {
+        var sections = ParseTomlSections(existing);
+        var rootAssignments = CreateRootAssignments(config);
+        var providerAssignments = CreateProviderAssignments(BuildClientEndpoint(config.Proxy), ShouldEnableWebSockets(config));
+        var featureAssignments = CreateFeatureAssignments();
+        var windowsAssignments = CreateWindowsAssignments();
+
+        var hasProviderSection = false;
+        var hasFeatureSection = false;
+        var hasWindowsSection = false;
+
+        foreach (var section in sections)
+        {
+            if (section.HeaderName is null)
+            {
+                section.Lines = MergeManagedLines(section.Lines, rootAssignments, RootManagedKeyOrder);
+                continue;
+            }
+
+            if (string.Equals(section.HeaderName, "[model_providers.meteor-ai]", StringComparison.Ordinal))
+            {
+                hasProviderSection = true;
+                section.Lines = MergeManagedLines(section.Lines, providerAssignments, ProviderManagedKeyOrder);
+                continue;
+            }
+
+            if (string.Equals(section.HeaderName, "[features]", StringComparison.Ordinal))
+            {
+                hasFeatureSection = true;
+                section.Lines = MergeManagedLines(section.Lines, featureAssignments, FeaturesManagedKeyOrder);
+                continue;
+            }
+
+            if (string.Equals(section.HeaderName, "[windows]", StringComparison.Ordinal))
+            {
+                hasWindowsSection = true;
+                section.Lines = MergeManagedLines(section.Lines, windowsAssignments, WindowsManagedKeyOrder);
+            }
+        }
+
+        if (!hasProviderSection)
+            sections.Add(CreateSection("[model_providers.meteor-ai]", providerAssignments, ProviderManagedKeyOrder));
+        if (!hasFeatureSection)
+            sections.Add(CreateSection("[features]", featureAssignments, FeaturesManagedKeyOrder));
+        if (!hasWindowsSection)
+            sections.Add(CreateSection("[windows]", windowsAssignments, WindowsManagedKeyOrder));
+
+        return SerializeTomlSections(sections);
+    }
+
+    private static Dictionary<string, string?> CreateRootAssignments(AppConfig config)
+    {
+        return new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["model"] = FormatTomlString(ManagedModel),
+            ["model_provider"] = FormatTomlString(ManagedProviderId),
+            ["disable_response_storage"] = "true",
+            ["approval_policy"] = FormatTomlString("never"),
+            ["sandbox_mode"] = FormatTomlString("danger-full-access"),
+            ["model_supports_reasoning_summaries"] = "true",
+            ["rmcp_client"] = "true",
+            ["model_reasoning_effort"] = FormatTomlString("xhigh"),
+            ["model_context_window"] = ShouldEnableOneMillionContext(config) ? OneMillionContextWindowTokens.ToString(CultureInfo.InvariantCulture) : null,
+            ["model_auto_compact_token_limit"] = ShouldEnableOneMillionContext(config) ? OneMillionAutoCompactTokenLimit.ToString(CultureInfo.InvariantCulture) : null,
+            ["personality"] = FormatTomlString("friendly")
+        };
+    }
+
+    private static Dictionary<string, string?> CreateProviderAssignments(string endpoint, bool supportsWebSockets)
+    {
+        return new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["name"] = FormatTomlString(ManagedProviderName),
+            ["base_url"] = FormatTomlString(endpoint),
+            ["wire_api"] = FormatTomlString("responses"),
+            ["supports_websockets"] = supportsWebSockets ? "true" : null,
+            ["requires_openai_auth"] = "true"
+        };
+    }
+
+    private static Dictionary<string, string?> CreateFeatureAssignments()
+    {
+        return new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["unified_exec"] = "true",
+            ["shell_snapshot"] = "true",
+            ["steer"] = "true",
+            ["skills"] = "true",
+            ["powershell_utf8"] = "true",
+            ["collaboration_modes"] = "true",
+            ["fast_mode"] = "true",
+            ["multi_agent"] = "true",
+            ["responses_websockets_v2"] = "true",
+            ["terminal_resize_reflow"] = "true",
+            ["memories"] = "true",
+            ["external_migration"] = "true",
+            ["goals"] = "true",
+            ["prevent_idle_sleep"] = "true"
+        };
+    }
+
+    private static Dictionary<string, string?> CreateWindowsAssignments()
+    {
+        return new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["sandbox"] = FormatTomlString("elevated")
+        };
+    }
+
+    private static TomlSection CreateSection(
+        string headerLine,
+        IReadOnlyDictionary<string, string?> desiredValues,
+        IReadOnlyList<string> keyOrder)
+    {
+        return new TomlSection(headerLine)
+        {
+            Lines = BuildManagedLines(desiredValues, keyOrder)
+        };
+    }
+
+    private static List<TomlSection> ParseTomlSections(string text)
+    {
+        var sections = new List<TomlSection>();
+        var current = new TomlSection(null);
+        sections.Add(current);
+
+        using var reader = new StringReader(text);
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (TryGetSectionHeader(line, out _))
+            {
+                current = new TomlSection(line);
+                sections.Add(current);
+                continue;
+            }
+
+            current.Lines.Add(line);
+        }
+
+        return sections;
+    }
+
+    private static List<string> BuildManagedLines(
+        IReadOnlyDictionary<string, string?> desiredValues,
+        IReadOnlyList<string> keyOrder)
+    {
+        var lines = new List<string>();
+        foreach (var key in keyOrder)
+        {
+            if (desiredValues.TryGetValue(key, out var value) && value is not null)
+                lines.Add($"{key} = {value}");
+        }
+
+        return lines;
+    }
+
+    private static List<string> MergeManagedLines(
+        IReadOnlyList<string> existingLines,
+        IReadOnlyDictionary<string, string?> desiredValues,
+        IReadOnlyList<string> keyOrder)
+    {
+        var result = new List<string>(existingLines.Count + keyOrder.Count);
+        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+        var defaultIndent = "";
+
+        foreach (var line in existingLines)
+        {
+            if (TryParseTomlAssignment(line, out var key, out var indent))
+            {
+                if (string.IsNullOrEmpty(defaultIndent) && !string.IsNullOrEmpty(indent))
+                    defaultIndent = indent;
+
+                if (desiredValues.TryGetValue(key, out var desiredValue))
+                {
+                    if (desiredValue is not null && seenKeys.Add(key))
+                        result.Add(indent + $"{key} = {desiredValue}");
+                    else
+                        seenKeys.Add(key);
+
+                    continue;
+                }
+            }
+
+            result.Add(line);
+        }
+
+        foreach (var key in keyOrder)
+        {
+            if (seenKeys.Contains(key))
+                continue;
+
+            if (desiredValues.TryGetValue(key, out var desiredValue) && desiredValue is not null)
+                result.Add(defaultIndent + $"{key} = {desiredValue}");
+        }
+
+        return result;
+    }
+
+    private static string SerializeTomlSections(IEnumerable<TomlSection> sections)
+    {
+        var blocks = new List<string>();
+        foreach (var section in sections)
+        {
+            var lines = new List<string>();
+            if (!string.IsNullOrWhiteSpace(section.HeaderLine))
+                lines.Add(section.HeaderLine);
+            lines.AddRange(section.Lines);
+
+            var block = string.Join(Environment.NewLine, lines).TrimEnd();
+            if (!string.IsNullOrWhiteSpace(block))
+                blocks.Add(block);
+        }
+
+        return blocks.Count == 0
+            ? ""
+            : string.Join(Environment.NewLine + Environment.NewLine, blocks) + Environment.NewLine;
+    }
+
+    private static bool TryGetSectionHeader(string line, out string header)
+    {
+        header = "";
+        var trimmed = line.TrimStart();
+        if (trimmed.Length == 0 || trimmed[0] == '#')
+            return false;
+
+        if (trimmed[0] != '[')
+            return false;
+
+        var closingLength = trimmed.StartsWith("[[", StringComparison.Ordinal) ? 2 : 1;
+        var closeIndex = trimmed.IndexOf(new string(']', closingLength), StringComparison.Ordinal);
+        if (closeIndex < 0)
+            return false;
+
+        var headerEnd = closeIndex + closingLength;
+        var tail = trimmed[headerEnd..].TrimStart();
+        if (tail.Length > 0 && tail[0] != '#')
+            return false;
+
+        header = trimmed[..headerEnd].Trim();
+        return true;
+    }
+
+    private static bool TryParseTomlAssignment(string line, out string key, out string indentation)
+    {
+        key = "";
+        indentation = "";
+
+        var trimmed = line.TrimStart();
+        if (trimmed.Length == 0 || trimmed[0] == '#')
+            return false;
+
+        var equalsIndex = trimmed.IndexOf('=');
+        if (equalsIndex <= 0)
+            return false;
+
+        var rawKey = trimmed[..equalsIndex].TrimEnd();
+        if (!IsBareTomlKey(rawKey))
+            return false;
+
+        key = rawKey;
+        indentation = line[..(line.Length - trimmed.Length)];
+        return true;
+    }
+
+    private static bool IsBareTomlKey(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        foreach (var ch in value)
+        {
+            if (char.IsLetterOrDigit(ch) || ch is '_' or '-')
+                continue;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string FormatTomlString(string value)
+    {
+        return "\"" + EscapeToml(value) + "\"";
     }
 
     private static string BuildClientEndpoint(ProxySettings proxy)
@@ -228,47 +474,38 @@ public sealed class CodexConfigWriter
 
     private static bool ShouldEnableOneMillionContext(AppConfig config)
     {
+        var provider = ResolveActiveCodexProvider(config);
+        return provider?.Codex?.EnableOneMillionContext == true;
+    }
+
+    private static bool ShouldEnableWebSockets(AppConfig config)
+    {
+        var provider = ResolveActiveCodexProvider(config);
+        return provider?.SupportsWebSockets == true &&
+            provider.Protocol == ProviderProtocol.OpenAiResponses;
+    }
+
+    private static ProviderConfig? ResolveActiveCodexProvider(AppConfig config)
+    {
         var providerId = string.IsNullOrWhiteSpace(config.ActiveCodexProviderId)
             ? config.ActiveProviderId
             : config.ActiveCodexProviderId;
-        var provider = config.Providers.FirstOrDefault(item =>
+        return config.Providers.FirstOrDefault(item =>
             item.SupportsCodex &&
             string.Equals(item.Id, providerId, StringComparison.OrdinalIgnoreCase));
-        return provider?.ClaudeCode?.EnableOneMillionContext == true;
-    }
-
-    private void BackupIfExists(string path)
-    {
-        if (!File.Exists(path))
-            return;
-
-        Directory.CreateDirectory(_paths.BackupDirectory);
-        var name = Path.GetFileName(path);
-        var stamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmssfff");
-
-        for (var attempt = 0; ; attempt++)
-        {
-            var suffix = attempt == 0 ? string.Empty : $"-{attempt:D2}";
-            var backupPath = Path.Combine(_paths.BackupDirectory, $"{stamp}{suffix}-{name}.bak");
-
-            try
-            {
-                File.Copy(path, backupPath, overwrite: false);
-                return;
-            }
-            catch (IOException) when (File.Exists(backupPath))
-            {
-            }
-        }
     }
 
     private void WriteTextIfChanged(string path, string content, string? existing = null)
     {
-        existing ??= File.Exists(path) ? File.ReadAllText(path) : null;
-        if (string.Equals(existing, content, StringComparison.Ordinal))
+        var fileExisted = File.Exists(path);
+        existing ??= fileExisted ? File.ReadAllText(path) : null;
+        if (fileExisted &&
+            string.Equals(existing, content, StringComparison.Ordinal) &&
+            !TextFileEncoding.HasUtf8Bom(path) &&
+            ManagedFileBackup.HasBackup(path))
             return;
 
-        BackupIfExists(path);
+        ManagedFileBackup.EnsureBackedUp(path);
         WriteTextAtomically(path, content);
     }
 
@@ -276,7 +513,7 @@ public sealed class CodexConfigWriter
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var tempPath = path + ".tmp";
-        File.WriteAllText(tempPath, content, Encoding.UTF8);
+        File.WriteAllText(tempPath, content, TextFileEncoding.Utf8NoBom);
         File.Move(tempPath, path, overwrite: true);
     }
 
@@ -285,15 +522,23 @@ public sealed class CodexConfigWriter
         return value.Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
     }
-}
 
-public sealed class CodexConfigRestoreState
-{
-    public bool ConfigExisted { get; set; }
+    private sealed class TomlSection
+    {
+        public TomlSection(string? headerLine)
+        {
+            HeaderLine = headerLine;
+            HeaderName = headerLine is null
+                ? null
+                : TryGetSectionHeader(headerLine, out var header)
+                    ? header
+                    : headerLine.Trim();
+        }
 
-    public string ConfigToml { get; set; } = "";
+        public string? HeaderLine { get; }
 
-    public bool AuthExisted { get; set; }
+        public string? HeaderName { get; }
 
-    public string AuthJson { get; set; } = "";
+        public List<string> Lines { get; set; } = [];
+    }
 }

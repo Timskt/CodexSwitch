@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using CodexSwitch.Models;
 using CodexSwitch.Services;
@@ -35,11 +36,12 @@ public sealed class CodexConfigWriterTests : IDisposable
         writer.Apply(config);
         writer.Apply(config);
 
-        var backups = Directory.GetFiles(paths.BackupDirectory);
+        var backups = Directory.GetFiles(paths.CodexDirectory, "*.bak");
         Assert.Equal(2, backups.Length);
-        Assert.Equal(1, backups.Count(path => Path.GetFileName(path).Contains("config.toml.bak", StringComparison.OrdinalIgnoreCase)));
-        Assert.Equal(1, backups.Count(path => Path.GetFileName(path).Contains("auth.json.bak", StringComparison.OrdinalIgnoreCase)));
-        Assert.Equal(2, backups.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(1, backups.Count(path => string.Equals(Path.GetFileName(path), "config.toml.bak", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(1, backups.Count(path => string.Equals(Path.GetFileName(path), "auth.json.bak", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal("model = \"before\"\n", File.ReadAllText(BackupPath(paths.CodexConfigPath)));
+        Assert.Equal("{\"openai_api_key\":\"before\"}\n", File.ReadAllText(BackupPath(paths.CodexAuthPath)));
     }
 
     [Fact]
@@ -70,6 +72,8 @@ public sealed class CodexConfigWriterTests : IDisposable
         Assert.Contains("base_url = \"http://127.0.0.1:12785/v1\"", configToml, StringComparison.Ordinal);
         Assert.Contains("responses_websockets_v2 = true", configToml, StringComparison.Ordinal);
         Assert.Contains("prevent_idle_sleep = true", configToml, StringComparison.Ordinal);
+        Assert.True(File.Exists(BackupPath(paths.CodexConfigPath)));
+        Assert.Equal("model = \"user-model\"\n", File.ReadAllText(BackupPath(paths.CodexConfigPath)));
 
         var authJson = File.ReadAllText(paths.CodexAuthPath);
         Assert.Contains("\"auth_mode\": \"apikey\"", authJson, StringComparison.Ordinal);
@@ -86,20 +90,206 @@ public sealed class CodexConfigWriterTests : IDisposable
 
         writer.Apply(new AppConfig
         {
-            ActiveProviderId = "anthropic",
-            ActiveCodexProviderId = "anthropic",
+            ActiveProviderId = "openai",
+            ActiveCodexProviderId = "openai",
             Providers =
             {
                 new ProviderConfig
                 {
-                    Id = "anthropic",
+                    Id = "openai",
+                    Protocol = ProviderProtocol.OpenAiResponses,
                     SupportsCodex = true,
-                    ClaudeCode = { EnableOneMillionContext = true }
+                    DefaultModel = "gpt-5.5",
+                    Codex = { EnableOneMillionContext = true },
+                    Models =
+                    {
+                        new ModelRouteConfig { Id = "gpt-5.5", Protocol = ProviderProtocol.OpenAiResponses }
+                    }
                 }
             }
         });
 
-        Assert.Contains("model_context_window = 1000000", File.ReadAllText(paths.CodexConfigPath), StringComparison.Ordinal);
+        var configToml = File.ReadAllText(paths.CodexConfigPath);
+        Assert.Contains("model_context_window = 1000000", configToml, StringComparison.Ordinal);
+        Assert.Contains("model_auto_compact_token_limit = 900000", configToml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_WritesCodexOneMillionContext_ForCustomCodexProviderWhenEnabled()
+    {
+        var appRoot = Path.Combine(_tempDirectory, "codex-1m-custom-appdata");
+        var codexRoot = Path.Combine(_tempDirectory, "codex-1m-custom-codex");
+        var paths = new AppPaths(appRoot, codexRoot);
+        var writer = new CodexConfigWriter(paths);
+
+        writer.Apply(new AppConfig
+        {
+            ActiveProviderId = "custom",
+            ActiveCodexProviderId = "custom",
+            Providers =
+            {
+                new ProviderConfig
+                {
+                    Id = "custom",
+                    Protocol = ProviderProtocol.OpenAiChat,
+                    SupportsCodex = true,
+                    DefaultModel = "custom-long-context-model",
+                    Codex = { EnableOneMillionContext = true }
+                }
+            }
+        });
+
+        var configToml = File.ReadAllText(paths.CodexConfigPath);
+        Assert.Contains("model_context_window = 1000000", configToml, StringComparison.Ordinal);
+        Assert.Contains("model_auto_compact_token_limit = 900000", configToml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_RemovesCodexOneMillionContext_WhenActiveProviderDoesNotSupportIt()
+    {
+        var appRoot = Path.Combine(_tempDirectory, "codex-1m-remove-appdata");
+        var codexRoot = Path.Combine(_tempDirectory, "codex-1m-remove-codex");
+        var paths = new AppPaths(appRoot, codexRoot);
+        var writer = new CodexConfigWriter(paths);
+        var config = new AppConfig
+        {
+            ActiveProviderId = "openai",
+            ActiveCodexProviderId = "openai",
+            Providers =
+            {
+                new ProviderConfig
+                {
+                    Id = "openai",
+                    Protocol = ProviderProtocol.OpenAiResponses,
+                    SupportsCodex = true,
+                    DefaultModel = "gpt-5.5",
+                    Codex = { EnableOneMillionContext = true },
+                    Models =
+                    {
+                        new ModelRouteConfig { Id = "gpt-5.5", Protocol = ProviderProtocol.OpenAiResponses }
+                    }
+                },
+                new ProviderConfig
+                {
+                    Id = "deepseek",
+                    Protocol = ProviderProtocol.OpenAiChat,
+                    SupportsCodex = false,
+                    DefaultModel = "deepseek-v4-flash",
+                    Codex = { EnableOneMillionContext = true },
+                    Models =
+                    {
+                        new ModelRouteConfig { Id = "deepseek-v4-flash", Protocol = ProviderProtocol.OpenAiChat }
+                    }
+                }
+            }
+        };
+
+        writer.Apply(config);
+        config.ActiveProviderId = "deepseek";
+        config.ActiveCodexProviderId = "deepseek";
+        writer.Apply(config);
+
+        var configToml = File.ReadAllText(paths.CodexConfigPath);
+        Assert.DoesNotContain("model_context_window", configToml, StringComparison.Ordinal);
+        Assert.DoesNotContain("model_auto_compact_token_limit", configToml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_WritesCodexSupportsWebSockets_WhenActiveProviderEnablesIt()
+    {
+        var appRoot = Path.Combine(_tempDirectory, "codex-websocket-appdata");
+        var codexRoot = Path.Combine(_tempDirectory, "codex-websocket-codex");
+        var paths = new AppPaths(appRoot, codexRoot);
+        var writer = new CodexConfigWriter(paths);
+        var config = new AppConfig
+        {
+            ActiveProviderId = "codex",
+            ActiveCodexProviderId = "codex",
+            Providers =
+            {
+                new ProviderConfig
+                {
+                    Id = "codex",
+                    Protocol = ProviderProtocol.OpenAiResponses,
+                    SupportsCodex = true,
+                    SupportsWebSockets = true
+                }
+            }
+        };
+
+        writer.Apply(config);
+
+        Assert.Contains("supports_websockets = true", File.ReadAllText(paths.CodexConfigPath), StringComparison.Ordinal);
+
+        config.Providers[0].SupportsWebSockets = false;
+        writer.Apply(config);
+
+        Assert.DoesNotContain("supports_websockets", File.ReadAllText(paths.CodexConfigPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_PreservesCustomCodexTomlSections_WhenProviderChanges()
+    {
+        var appRoot = Path.Combine(_tempDirectory, "preserve-toml-appdata");
+        var codexRoot = Path.Combine(_tempDirectory, "preserve-toml-codex");
+        var paths = new AppPaths(appRoot, codexRoot);
+        Directory.CreateDirectory(paths.CodexDirectory);
+        File.WriteAllText(
+            paths.CodexConfigPath,
+            """
+            custom_root = true
+
+            [mcp_servers.files]
+            command = "npx"
+            args = ["-y", "@modelcontextprotocol/server-filesystem"]
+
+            [features]
+            user_experiment = true
+            """);
+
+        var writer = new CodexConfigWriter(paths);
+        var config = new AppConfig
+        {
+            ActiveProviderId = "fast",
+            ActiveCodexProviderId = "fast",
+            Providers =
+            {
+                new ProviderConfig
+                {
+                    Id = "fast",
+                    Protocol = ProviderProtocol.OpenAiChat,
+                    SupportsCodex = true,
+                    DefaultModel = "deepseek-v4-flash"
+                },
+                new ProviderConfig
+                {
+                    Id = "long-context",
+                    Protocol = ProviderProtocol.OpenAiResponses,
+                    SupportsCodex = true,
+                    DefaultModel = "gpt-5.5",
+                    Codex = { EnableOneMillionContext = true },
+                    Models =
+                    {
+                        new ModelRouteConfig { Id = "gpt-5.5", Protocol = ProviderProtocol.OpenAiResponses }
+                    }
+                }
+            }
+        };
+
+        writer.Apply(config);
+        config.ActiveProviderId = "long-context";
+        config.ActiveCodexProviderId = "long-context";
+        writer.Apply(config);
+
+        var configToml = File.ReadAllText(paths.CodexConfigPath);
+        Assert.Contains("custom_root = true", configToml, StringComparison.Ordinal);
+        Assert.Contains("[mcp_servers.files]", configToml, StringComparison.Ordinal);
+        Assert.Contains("command = \"npx\"", configToml, StringComparison.Ordinal);
+        Assert.Contains("args = [\"-y\", \"@modelcontextprotocol/server-filesystem\"]", configToml, StringComparison.Ordinal);
+        Assert.Contains("user_experiment = true", configToml, StringComparison.Ordinal);
+        Assert.Contains("responses_websockets_v2 = true", configToml, StringComparison.Ordinal);
+        Assert.Contains("model_context_window = 1000000", configToml, StringComparison.Ordinal);
+        Assert.Contains("model_auto_compact_token_limit = 900000", configToml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -164,9 +354,13 @@ public sealed class CodexConfigWriterTests : IDisposable
             Assert.True(root.GetProperty("skipDangerousModePermissionPrompt").GetBoolean());
         }
 
+        Assert.True(File.Exists(BackupPath(paths.ClaudeSettingsPath)));
+        Assert.Equal(original, File.ReadAllText(BackupPath(paths.ClaudeSettingsPath)));
+
         writer.RestoreOriginal();
 
         Assert.Equal(original, File.ReadAllText(paths.ClaudeSettingsPath));
+        Assert.False(File.Exists(BackupPath(paths.ClaudeSettingsPath)));
     }
 
     [Fact]
@@ -204,7 +398,14 @@ public sealed class CodexConfigWriterTests : IDisposable
         });
 
         Assert.Equal(originalAuth, File.ReadAllText(paths.CodexAuthPath));
+        Assert.True(File.Exists(BackupPath(paths.CodexAuthPath)));
+        Assert.Equal(originalAuth, File.ReadAllText(BackupPath(paths.CodexAuthPath)));
         Assert.Contains("model_provider = \"meteor-ai\"", File.ReadAllText(paths.CodexConfigPath), StringComparison.Ordinal);
+
+        writer.RestoreOriginal();
+
+        Assert.Equal(originalAuth, File.ReadAllText(paths.CodexAuthPath));
+        Assert.False(File.Exists(BackupPath(paths.CodexAuthPath)));
     }
 
     [Fact]
@@ -235,6 +436,7 @@ public sealed class CodexConfigWriterTests : IDisposable
         });
 
         Assert.False(File.Exists(paths.CodexAuthPath));
+        Assert.False(File.Exists(BackupPath(paths.CodexAuthPath)));
         Assert.Contains("model_provider = \"meteor-ai\"", File.ReadAllText(paths.CodexConfigPath), StringComparison.Ordinal);
     }
 
@@ -263,10 +465,13 @@ public sealed class CodexConfigWriterTests : IDisposable
         Assert.Contains("Fake Codex App auth fixture", fakeAuth, StringComparison.Ordinal);
         Assert.Contains("fake-refresh-token-for-local-test-only", fakeAuth, StringComparison.Ordinal);
         Assert.DoesNotContain("real-token-placeholder", fakeAuth, StringComparison.Ordinal);
+        Assert.True(File.Exists(BackupPath(paths.CodexAuthPath)));
+        Assert.Equal(originalAuth, File.ReadAllText(BackupPath(paths.CodexAuthPath)));
 
         writer.RestoreOriginal();
 
         Assert.Equal(originalAuth, File.ReadAllText(paths.CodexAuthPath));
+        Assert.False(File.Exists(BackupPath(paths.CodexAuthPath)));
     }
 
     [Fact]
@@ -286,7 +491,27 @@ public sealed class CodexConfigWriterTests : IDisposable
 
         Assert.Equal("model = \"before\"\n", File.ReadAllText(paths.CodexConfigPath));
         Assert.Equal("{\"OPENAI_API_KEY\":\"before\"}\n", File.ReadAllText(paths.CodexAuthPath));
-        Assert.False(File.Exists(paths.CodexRestoreStatePath));
+        Assert.False(File.Exists(BackupPath(paths.CodexConfigPath)));
+        Assert.False(File.Exists(BackupPath(paths.CodexAuthPath)));
+    }
+
+    [Fact]
+    public void RestoreOriginal_WritesAuthJsonWithoutUtf8Bom()
+    {
+        var appRoot = Path.Combine(_tempDirectory, "restore-no-bom-appdata");
+        var codexRoot = Path.Combine(_tempDirectory, "restore-no-bom-codex");
+        var paths = new AppPaths(appRoot, codexRoot);
+        Directory.CreateDirectory(paths.CodexDirectory);
+        const string originalAuth = "{\"auth_mode\":\"chatgpt\",\"tokens\":{\"access_token\":\"before\"}}\n";
+        File.WriteAllText(paths.CodexAuthPath, originalAuth, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        var writer = new CodexConfigWriter(paths);
+        writer.Apply(new AppConfig());
+
+        writer.RestoreOriginal();
+
+        Assert.Equal(Encoding.UTF8.GetBytes(originalAuth), File.ReadAllBytes(paths.CodexAuthPath));
+        Assert.False(File.Exists(BackupPath(paths.CodexAuthPath)));
     }
 
     [Fact]
@@ -303,7 +528,13 @@ public sealed class CodexConfigWriterTests : IDisposable
 
         Assert.False(File.Exists(paths.CodexConfigPath));
         Assert.False(File.Exists(paths.CodexAuthPath));
-        Assert.False(File.Exists(paths.CodexRestoreStatePath));
+        Assert.False(File.Exists(BackupPath(paths.CodexConfigPath)));
+        Assert.False(File.Exists(BackupPath(paths.CodexAuthPath)));
+    }
+
+    private static string BackupPath(string path)
+    {
+        return path + ".bak";
     }
 
     public void Dispose()

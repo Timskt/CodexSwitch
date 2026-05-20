@@ -6,6 +6,8 @@ namespace CodexSwitch.Proxy;
 
 internal static class AnthropicMessagesToResponsesPayloadBuilder
 {
+    private static readonly string DefaultPromptCacheKey = "codexswitch-" + Guid.NewGuid().ToString("N");
+
     public static byte[] Build(ProviderRequestContext context, string requestModel)
     {
         var root = context.RequestRoot;
@@ -17,11 +19,16 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
         JsonElement? requestedServiceTier = null;
         JsonElement? toolsValue = null;
         JsonElement? toolChoiceValue = null;
+        JsonElement? outputConfigValue = null;
+        string? promptCacheKey = null;
         var wroteModel = false;
         var wroteServiceTier = false;
         var wroteInstructions = false;
         var wroteInput = false;
         var wroteThinkingControl = false;
+        var wroteParallelToolCalls = false;
+        var wrotePromptCacheKey = false;
+        var wroteTextConfig = false;
 
         using var buffer = new MemoryStream();
         using (var writer = new Utf8JsonWriter(buffer))
@@ -67,9 +74,32 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
                         toolChoiceValue = property.Value.Clone();
                         break;
 
+                    case "output_config":
+                        outputConfigValue = property.Value.Clone();
+                        break;
+
+                    case "metadata":
+                        promptCacheKey = ExtractMetadataUserIdentifier(property.Value) ?? promptCacheKey;
+                        break;
+
+                    case "prompt_cache_key":
+                        wrotePromptCacheKey = true;
+                        property.WriteTo(writer);
+                        break;
+
+                    case "text":
+                        wroteTextConfig = true;
+                        property.WriteTo(writer);
+                        break;
+
+                    case "parallel_tool_calls":
+                        wroteParallelToolCalls = true;
+                        property.WriteTo(writer);
+                        break;
+
                     case "service_tier":
                         wroteServiceTier = true;
-                        requestedServiceTier = property.Value.Clone();
+                        requestedServiceTier = NormalizeAnthropicServiceTier(property.Value);
                         break;
 
                     case "thinking":
@@ -80,6 +110,9 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
                         // OpenAI `reasoning` or a provider-specific `thinking` object written below.
                         break;
 
+                    case "cache_control":
+                    case "inference_geo":
+                    case "betas":
                     case "container":
                     case "context_management":
                     case "mcp_servers":
@@ -118,6 +151,18 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
 
             if (toolChoiceValue.HasValue)
                 WriteResponsesToolChoice(writer, toolChoiceValue.Value);
+
+            if (toolChoiceValue.HasValue && !wroteParallelToolCalls &&
+                TryGetBool(toolChoiceValue.Value, "disable_parallel_tool_use", out var disableParallelToolUse))
+            {
+                writer.WriteBoolean("parallel_tool_calls", !disableParallelToolUse);
+            }
+
+            if (outputConfigValue.HasValue && !wroteTextConfig)
+                WriteResponsesTextConfig(writer, outputConfigValue.Value);
+
+            if (!wrotePromptCacheKey)
+                writer.WriteString("prompt_cache_key", NormalizePromptCacheKey(promptCacheKey));
 
             if (thinkingMode.HasValue)
             {
@@ -280,10 +325,7 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
         bool writeReasoningContentField)
     {
         var reasoningText = reasoning.ToString();
-        if (!string.IsNullOrWhiteSpace(reasoningText) && !writeReasoningContentField)
-            WriteReasoningItem(writer, reasoningText);
-
-        if (contentParts.Count > 0 || !string.IsNullOrWhiteSpace(reasoningText))
+        if (contentParts.Count > 0 || (writeReasoningContentField && !string.IsNullOrWhiteSpace(reasoningText)))
             WriteResponsesMessageItem(writer, role, contentParts, writeReasoningContentField ? reasoningText : null);
 
         contentParts.Clear();
@@ -305,25 +347,6 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
         writer.WriteStartArray();
         foreach (var part in contentParts)
             part.WriteTo(writer);
-        writer.WriteEndArray();
-        writer.WriteEndObject();
-    }
-
-    private static void WriteReasoningItem(Utf8JsonWriter writer, string reasoningText)
-    {
-        writer.WriteStartObject();
-        writer.WriteString("id", ProtocolAdapterCommon.CreateReasoningId());
-        writer.WriteString("type", "reasoning");
-        writer.WriteString("status", "completed");
-        writer.WritePropertyName("summary");
-        writer.WriteStartArray();
-        writer.WriteEndArray();
-        writer.WritePropertyName("content");
-        writer.WriteStartArray();
-        writer.WriteStartObject();
-        writer.WriteString("type", "reasoning_text");
-        writer.WriteString("text", reasoningText);
-        writer.WriteEndObject();
         writer.WriteEndArray();
         writer.WriteEndObject();
     }
@@ -414,22 +437,135 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
             TryGetString(toolResult, "tool_call_id") ??
             TryGetString(toolResult, "id") ??
             ProtocolAdapterCommon.CreateFunctionCallId());
-        writer.WriteString("output", ExtractToolResultOutput(toolResult));
+        writer.WritePropertyName("output");
+        WriteFunctionCallOutputValue(writer, toolResult);
         writer.WriteEndObject();
     }
 
-    private static string ExtractToolResultOutput(JsonElement toolResult)
+    private static void WriteFunctionCallOutputValue(Utf8JsonWriter writer, JsonElement toolResult)
     {
         if (!toolResult.TryGetProperty("content", out var content))
-            return string.Empty;
-
-        return content.ValueKind switch
         {
-            JsonValueKind.String => content.GetString() ?? string.Empty,
-            JsonValueKind.Array => TryJoinTextParts(content, out var text) ? text : content.GetRawText(),
-            JsonValueKind.Null => string.Empty,
-            _ => ConvertJsonElementToText(content)
-        };
+            writer.WriteStringValue(string.Empty);
+            return;
+        }
+
+        switch (content.ValueKind)
+        {
+            case JsonValueKind.String:
+                writer.WriteStringValue(content.GetString() ?? string.Empty);
+                return;
+
+            case JsonValueKind.Array:
+                if (content.GetArrayLength() == 0)
+                {
+                    writer.WriteStringValue(string.Empty);
+                    return;
+                }
+
+                if (TryJoinTextParts(content, out var text))
+                {
+                    writer.WriteStringValue(text);
+                    return;
+                }
+
+                writer.WriteStartArray();
+                foreach (var part in content.EnumerateArray())
+                    WriteFunctionCallOutputContentPart(writer, part);
+                writer.WriteEndArray();
+                return;
+
+            case JsonValueKind.Null:
+                writer.WriteStringValue(string.Empty);
+                return;
+
+            default:
+                writer.WriteStringValue(ConvertJsonElementToText(content));
+                return;
+        }
+    }
+
+    private static void WriteFunctionCallOutputContentPart(Utf8JsonWriter writer, JsonElement part)
+    {
+        if (part.ValueKind == JsonValueKind.String)
+        {
+            WriteFunctionCallOutputTextPart(writer, part.GetString() ?? string.Empty);
+            return;
+        }
+
+        if (part.ValueKind != JsonValueKind.Object)
+        {
+            WriteFunctionCallOutputTextPart(writer, ConvertJsonElementToText(part));
+            return;
+        }
+
+        switch (TryGetString(part, "type"))
+        {
+            case "text":
+                WriteFunctionCallOutputTextPart(writer, ExtractTextFromContentPart(part) ?? string.Empty);
+                return;
+
+            case "image":
+                if (TryWriteFunctionCallOutputImagePart(writer, part))
+                    return;
+                break;
+
+            case "document":
+                if (TryWriteFunctionCallOutputDocumentPart(writer, part))
+                    return;
+                break;
+        }
+
+        WriteFunctionCallOutputTextPart(writer, ExtractTextFromContentPart(part) ?? ConvertJsonElementToText(part));
+    }
+
+    private static void WriteFunctionCallOutputTextPart(Utf8JsonWriter writer, string text)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("type", "input_text");
+        writer.WriteString("text", text);
+        writer.WriteEndObject();
+    }
+
+    private static bool TryWriteFunctionCallOutputImagePart(Utf8JsonWriter writer, JsonElement part)
+    {
+        if (!TryExtractAnthropicMediaUrl(part, out var url))
+            return false;
+
+        writer.WriteStartObject();
+        writer.WriteString("type", "input_image");
+        writer.WriteString("image_url", url);
+        writer.WriteEndObject();
+        return true;
+    }
+
+    private static bool TryWriteFunctionCallOutputDocumentPart(Utf8JsonWriter writer, JsonElement part)
+    {
+        if (!part.TryGetProperty("source", out var source) || source.ValueKind != JsonValueKind.Object)
+            return false;
+
+        var sourceType = TryGetString(source, "type");
+        if (!string.Equals(sourceType, "url", StringComparison.Ordinal) &&
+            !string.Equals(sourceType, "base64", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        writer.WriteStartObject();
+        writer.WriteString("type", "input_file");
+        if (string.Equals(sourceType, "url", StringComparison.Ordinal))
+        {
+            writer.WriteString("file_url", TryGetString(source, "url") ?? string.Empty);
+        }
+        else if (string.Equals(sourceType, "base64", StringComparison.Ordinal))
+        {
+            var mediaType = TryGetString(source, "media_type") ?? "application/octet-stream";
+            writer.WriteString("filename", TryGetString(part, "title") ?? "document");
+            writer.WriteString("file_data", $"data:{mediaType};base64,{TryGetString(source, "data") ?? string.Empty}");
+        }
+
+        writer.WriteEndObject();
+        return true;
     }
 
     private static void WriteResponsesTools(Utf8JsonWriter writer, JsonElement toolsValue)
@@ -442,22 +578,41 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
                 if (tool.ValueKind != JsonValueKind.Object)
                     continue;
 
-                var name = TryGetString(tool, "name");
+                var toolType = TryGetString(tool, "type");
+                if (!IsFunctionLikeToolType(toolType) && !LooksLikeImplicitFunctionTool(tool))
+                    continue;
+
+                var toolBody = ResolveFunctionToolBody(tool);
+                var name = TryGetString(toolBody, "name") ?? TryGetString(tool, "name");
                 if (string.IsNullOrWhiteSpace(name))
                     continue;
 
                 writer.WriteStartObject();
                 writer.WriteString("type", "function");
                 writer.WriteString("name", name);
-                if (tool.TryGetProperty("description", out var description) && description.ValueKind == JsonValueKind.String)
+                if (TryGetToolProperty(toolBody, tool, "description", out var description) &&
+                    description.ValueKind == JsonValueKind.String)
+                {
                     writer.WriteString("description", description.GetString());
+                }
+
+                var strict = TryGetToolProperty(toolBody, tool, "strict", out var strictValue) &&
+                    strictValue.ValueKind == JsonValueKind.True;
+                writer.WriteBoolean("strict", strict);
+
                 writer.WritePropertyName("parameters");
-                if (tool.TryGetProperty("input_schema", out var inputSchema))
-                    inputSchema.WriteTo(writer);
-                else if (tool.TryGetProperty("parameters", out var parameters))
-                    parameters.WriteTo(writer);
+                if (TryGetToolSchema(toolBody, tool, out var parameters))
+                {
+                    if (strict)
+                        WriteStrictJsonSchema(writer, parameters);
+                    else
+                        parameters.WriteTo(writer);
+                }
                 else
-                    WriteEmptyParameters(writer);
+                {
+                    WriteEmptyParameters(writer, strict);
+                }
+
                 writer.WriteEndObject();
             }
         }
@@ -465,7 +620,151 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
         writer.WriteEndArray();
     }
 
-    private static void WriteEmptyParameters(Utf8JsonWriter writer)
+    private static bool IsFunctionLikeToolType(string? toolType)
+    {
+        return string.IsNullOrWhiteSpace(toolType) ||
+            string.Equals(toolType, "function", StringComparison.Ordinal) ||
+            string.Equals(toolType, "tool", StringComparison.Ordinal) ||
+            string.Equals(toolType, "custom", StringComparison.Ordinal);
+    }
+
+    private static bool LooksLikeImplicitFunctionTool(JsonElement tool)
+    {
+        return tool.ValueKind == JsonValueKind.Object &&
+            (tool.TryGetProperty("name", out _) || tool.TryGetProperty("function", out _)) &&
+            (tool.TryGetProperty("parameters", out _) || tool.TryGetProperty("input_schema", out _));
+    }
+
+    private static JsonElement ResolveFunctionToolBody(JsonElement tool)
+    {
+        return tool.TryGetProperty("function", out var functionValue) && functionValue.ValueKind == JsonValueKind.Object
+            ? functionValue
+            : tool;
+    }
+
+    private static bool TryGetToolProperty(
+        JsonElement preferred,
+        JsonElement fallback,
+        string propertyName,
+        out JsonElement value)
+    {
+        if (preferred.ValueKind == JsonValueKind.Object && preferred.TryGetProperty(propertyName, out value))
+            return true;
+
+        if (fallback.ValueKind == JsonValueKind.Object && fallback.TryGetProperty(propertyName, out value))
+            return true;
+
+        value = default;
+        return false;
+    }
+
+    private static bool TryGetToolSchema(JsonElement preferred, JsonElement fallback, out JsonElement schema)
+    {
+        if (TryGetToolProperty(preferred, fallback, "parameters", out schema))
+            return true;
+
+        if (TryGetToolProperty(preferred, fallback, "input_schema", out schema))
+            return true;
+
+        schema = default;
+        return false;
+    }
+
+    private static void WriteStrictJsonSchema(Utf8JsonWriter writer, JsonElement schema)
+    {
+        if (schema.ValueKind != JsonValueKind.Object)
+        {
+            schema.WriteTo(writer);
+            return;
+        }
+
+        writer.WriteStartObject();
+
+        var propertyNames = new List<string>();
+        JsonElement? originalRequired = null;
+        var hasRequired = false;
+        var hasAdditionalProperties = false;
+
+        foreach (var property in schema.EnumerateObject())
+        {
+            if (property.NameEquals("properties") && property.Value.ValueKind == JsonValueKind.Object)
+            {
+                writer.WritePropertyName("properties");
+                writer.WriteStartObject();
+                foreach (var nestedProperty in property.Value.EnumerateObject())
+                {
+                    propertyNames.Add(nestedProperty.Name);
+                    writer.WritePropertyName(nestedProperty.Name);
+                    WriteStrictJsonSchema(writer, nestedProperty.Value);
+                }
+
+                writer.WriteEndObject();
+                continue;
+            }
+
+            if (property.NameEquals("required"))
+            {
+                hasRequired = true;
+                originalRequired = property.Value.Clone();
+                continue;
+            }
+
+            if (property.NameEquals("additionalProperties"))
+            {
+                hasAdditionalProperties = true;
+                property.WriteTo(writer);
+                continue;
+            }
+
+            if ((property.NameEquals("anyOf") ||
+                 property.NameEquals("allOf") ||
+                 property.NameEquals("oneOf")) &&
+                property.Value.ValueKind == JsonValueKind.Array)
+            {
+                writer.WritePropertyName(property.Name);
+                writer.WriteStartArray();
+                foreach (var child in property.Value.EnumerateArray())
+                    WriteStrictJsonSchema(writer, child);
+                writer.WriteEndArray();
+                continue;
+            }
+
+            if (property.NameEquals("items") && property.Value.ValueKind == JsonValueKind.Object)
+            {
+                writer.WritePropertyName("items");
+                WriteStrictJsonSchema(writer, property.Value);
+                continue;
+            }
+
+            property.WriteTo(writer);
+        }
+
+        if (propertyNames.Count > 0)
+        {
+            writer.WritePropertyName("required");
+            writer.WriteStartArray();
+            foreach (var name in propertyNames)
+                writer.WriteStringValue(name);
+            writer.WriteEndArray();
+        }
+        else if (hasRequired && originalRequired.HasValue)
+        {
+            writer.WritePropertyName("required");
+            originalRequired.Value.WriteTo(writer);
+        }
+
+        if (!hasAdditionalProperties &&
+            schema.TryGetProperty("type", out var typeValue) &&
+            typeValue.ValueKind == JsonValueKind.String &&
+            string.Equals(typeValue.GetString(), "object", StringComparison.Ordinal))
+        {
+            writer.WriteBoolean("additionalProperties", false);
+        }
+
+        writer.WriteEndObject();
+    }
+
+    private static void WriteEmptyParameters(Utf8JsonWriter writer, bool strict)
     {
         writer.WriteStartObject();
         writer.WriteString("type", "object");
@@ -475,6 +774,8 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
         writer.WritePropertyName("required");
         writer.WriteStartArray();
         writer.WriteEndArray();
+        if (strict)
+            writer.WriteBoolean("additionalProperties", false);
         writer.WriteEndObject();
     }
 
@@ -558,6 +859,86 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
         writer.WriteStartObject();
         writer.WriteString("effort", mode.Effort);
         writer.WriteEndObject();
+    }
+
+    private static void WriteResponsesTextConfig(Utf8JsonWriter writer, JsonElement outputConfig)
+    {
+        if (outputConfig.ValueKind != JsonValueKind.Object ||
+            !TryGetProperty(outputConfig, "format", "format_", out var format) ||
+            format.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        writer.WritePropertyName("text");
+        writer.WriteStartObject();
+        writer.WritePropertyName("format");
+        WriteResponsesTextFormat(writer, format);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteResponsesTextFormat(Utf8JsonWriter writer, JsonElement format)
+    {
+        var type = TryGetString(format, "type");
+        if (!string.Equals(type, "json_schema", StringComparison.Ordinal))
+        {
+            format.WriteTo(writer);
+            return;
+        }
+
+        writer.WriteStartObject();
+        writer.WriteString("type", "json_schema");
+        writer.WriteString("name", ResolveResponseFormatName(format));
+        if (format.TryGetProperty("description", out var description) &&
+            description.ValueKind == JsonValueKind.String)
+        {
+            writer.WriteString("description", description.GetString());
+        }
+
+        writer.WritePropertyName("schema");
+        if (format.TryGetProperty("schema", out var schema))
+            schema.WriteTo(writer);
+        else
+            WriteEmptyParameters(writer, strict: true);
+
+        if (TryGetBool(format, "strict", out var strict))
+            writer.WriteBoolean("strict", strict);
+
+        writer.WriteEndObject();
+    }
+
+    private static string ResolveResponseFormatName(JsonElement format)
+    {
+        var name = TryGetString(format, "name");
+        if (!string.IsNullOrWhiteSpace(name))
+            return SanitizeResponseFormatName(name);
+
+        if (format.TryGetProperty("schema", out var schema) &&
+            schema.ValueKind == JsonValueKind.Object)
+        {
+            var title = TryGetString(schema, "title");
+            if (!string.IsNullOrWhiteSpace(title))
+                return SanitizeResponseFormatName(title);
+        }
+
+        return "response";
+    }
+
+    private static string SanitizeResponseFormatName(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            if (char.IsAsciiLetterOrDigit(ch) || ch == '_' || ch == '-')
+                builder.Append(ch);
+            else if (char.IsWhiteSpace(ch))
+                builder.Append('_');
+        }
+
+        if (builder.Length == 0)
+            return "response";
+
+        return builder.Length <= 64 ? builder.ToString() : builder.ToString(0, 64);
     }
 
     private static ThinkingMode? ExtractThinkingMode(JsonElement root)
@@ -719,6 +1100,75 @@ internal static class AnthropicMessagesToResponsesPayloadBuilder
                value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+    }
+
+    private static bool TryGetBool(JsonElement element, string propertyName, out bool value)
+    {
+        if (element.ValueKind == JsonValueKind.Object &&
+            element.TryGetProperty(propertyName, out var propertyValue) &&
+            (propertyValue.ValueKind == JsonValueKind.True || propertyValue.ValueKind == JsonValueKind.False))
+        {
+            value = propertyValue.GetBoolean();
+            return true;
+        }
+
+        value = false;
+        return false;
+    }
+
+    private static bool TryGetProperty(
+        JsonElement element,
+        string primaryName,
+        string fallbackName,
+        out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(primaryName, out value))
+            return true;
+
+        if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(fallbackName, out value))
+            return true;
+
+        value = default;
+        return false;
+    }
+
+    private static string? ExtractMetadataUserIdentifier(JsonElement metadata)
+    {
+        if (metadata.ValueKind != JsonValueKind.Object)
+            return null;
+
+        return TryGetString(metadata, "user_id") ??
+            TryGetString(metadata, "uerd_id") ??
+            TryGetString(metadata, "userId");
+    }
+
+    private static string NormalizePromptCacheKey(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? DefaultPromptCacheKey
+            : value;
+    }
+
+    private static JsonElement NormalizeAnthropicServiceTier(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+            return value.Clone();
+
+        var mapped = value.GetString() switch
+        {
+            "standard_only" => "default",
+            "standard" => "default",
+            _ => value.GetString()
+        };
+
+        return CreateStringElement(mapped ?? string.Empty);
+    }
+
+    private static JsonElement CreateStringElement(string value)
+    {
+        var json = ProtocolAdapterCommon.SerializeJson(writer => writer.WriteStringValue(value));
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
     }
 
     private static long? TryGetInt64(JsonElement element, string propertyName)

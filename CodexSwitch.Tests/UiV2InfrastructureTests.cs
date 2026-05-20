@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using CodexSwitch.Models;
@@ -269,6 +270,64 @@ public sealed class UiV2InfrastructureTests : IDisposable
         Assert.Equal("Disabled", service.State.StatusText);
         Assert.Equal(config.Proxy.Endpoint, service.State.Endpoint);
         Assert.False(File.Exists(paths.CodexConfigPath));
+    }
+
+    [Fact]
+    public async Task ProxyHostService_StopAsync_RestoresBakFiles()
+    {
+        var paths = CreatePaths("restore-bak-proxy");
+        var catalog = new ModelPricingCatalog();
+        var calculator = new PriceCalculator(catalog);
+        var configStore = new ConfigurationStore(paths);
+        Directory.CreateDirectory(paths.CodexDirectory);
+        File.WriteAllText(paths.CodexConfigPath, "model = \"before\"\n");
+        File.WriteAllText(paths.CodexAuthPath, "{\"auth_mode\":\"chatgpt\",\"tokens\":{\"access_token\":\"before\"}}\n");
+
+        var config = new AppConfig
+        {
+            ActiveProviderId = "first",
+            Proxy =
+            {
+                Enabled = true,
+                Host = "127.0.0.1",
+                Port = GetAvailablePort(),
+                InboundApiKey = "local-secret"
+            },
+            Providers =
+            {
+                new ProviderConfig
+                {
+                    Id = "first",
+                    BaseUrl = "https://example.com/v1",
+                    Protocol = ProviderProtocol.OpenAiResponses,
+                    DefaultModel = "gpt-5.5"
+                }
+            }
+        };
+
+        using var authHttpClient = new HttpClient();
+        await using var service = new ProxyHostService(
+            new UsageMeter(calculator),
+            calculator,
+            new UsageLogWriter(paths),
+            new CodexConfigWriter(paths),
+            new ClaudeCodeConfigWriter(paths),
+            new ProviderAuthService(configStore, config, authHttpClient),
+            Array.Empty<IProviderProtocolAdapter>());
+
+        await service.StartAsync(config);
+
+        Assert.True(File.Exists(paths.CodexConfigPath + ".bak"));
+        Assert.True(File.Exists(paths.CodexAuthPath + ".bak"));
+        Assert.Contains("model_provider = \"meteor-ai\"", File.ReadAllText(paths.CodexConfigPath), StringComparison.Ordinal);
+        Assert.Contains("\"auth_mode\": \"apikey\"", File.ReadAllText(paths.CodexAuthPath), StringComparison.Ordinal);
+
+        await service.StopAsync();
+
+        Assert.Equal("model = \"before\"\n", File.ReadAllText(paths.CodexConfigPath));
+        Assert.Equal("{\"auth_mode\":\"chatgpt\",\"tokens\":{\"access_token\":\"before\"}}\n", File.ReadAllText(paths.CodexAuthPath));
+        Assert.False(File.Exists(paths.CodexConfigPath + ".bak"));
+        Assert.False(File.Exists(paths.CodexAuthPath + ".bak"));
     }
 
     [Fact]
@@ -693,6 +752,312 @@ public sealed class UiV2InfrastructureTests : IDisposable
         Assert.Equal("Starting", statuses.First());
         Assert.DoesNotContain("Stopped", statuses);
         Assert.Contains("Running", statuses);
+    }
+
+    [Fact]
+    public async Task ProxyHostService_ReloadConfig_RoutesResponsesToUpdatedActiveProvider()
+    {
+        var paths = CreatePaths("reload-config-routes");
+        var catalog = new ModelPricingCatalog();
+        var calculator = new PriceCalculator(catalog);
+        var configStore = new ConfigurationStore(paths);
+        var upstreamUris = new List<Uri>();
+        using var upstreamHttpClient = new HttpClient(new AsyncHandler((request, _) =>
+        {
+            upstreamUris.Add(request.RequestUri!);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "id": "resp_1",
+                      "object": "response",
+                      "status": "completed",
+                      "model": "switch-upstream",
+                      "output": [],
+                      "usage": { "input_tokens": 1, "output_tokens": 1 }
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            });
+        }));
+        var config = new AppConfig
+        {
+            ActiveProviderId = "first",
+            ActiveCodexProviderId = "first",
+            Proxy =
+            {
+                Enabled = true,
+                Host = "127.0.0.1",
+                Port = GetAvailablePort()
+            },
+            Providers =
+            {
+                CreateResponsesProvider("first", "https://first.test/v1"),
+                CreateResponsesProvider("second", "https://second.test/v1")
+            }
+        };
+        using var authHttpClient = new HttpClient();
+        await using var service = new ProxyHostService(
+            new UsageMeter(calculator),
+            calculator,
+            new UsageLogWriter(paths),
+            new CodexConfigWriter(paths),
+            new ClaudeCodeConfigWriter(paths),
+            new ProviderAuthService(configStore, config, authHttpClient),
+            [new OpenAiResponsesAdapter(upstreamHttpClient)]);
+
+        await service.StartAsync(config);
+        using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false });
+
+        await PostResponsesAsync(client, config.Proxy.Port);
+        config.ActiveProviderId = "second";
+        config.ActiveCodexProviderId = "second";
+        Assert.True(service.ReloadConfig(config));
+        await PostResponsesAsync(client, config.Proxy.Port);
+
+        Assert.Equal("first.test", upstreamUris[0].Host);
+        Assert.Equal("second.test", upstreamUris[1].Host);
+        Assert.True(service.State.IsRunning);
+        Assert.Equal("second", service.State.ActiveProviderId);
+        Assert.Null(service.State.Error);
+    }
+
+    [Fact]
+    public async Task ProxyHostService_ResponsesWebSocket_ProxiesRewrittenPayloadAndReusesUpstream()
+    {
+        var paths = CreatePaths("responses-websocket-proxy");
+        var catalog = new ModelPricingCatalog();
+        var calculator = new PriceCalculator(catalog);
+        var meter = new UsageMeter(calculator);
+        var configStore = new ConfigurationStore(paths);
+        await using var upstream = new FakeResponsesWebSocketServer(GetAvailablePort());
+        var config = new AppConfig
+        {
+            ActiveProviderId = "openai",
+            ActiveCodexProviderId = "openai",
+            Proxy =
+            {
+                Enabled = true,
+                Host = "127.0.0.1",
+                Port = GetAvailablePort()
+            },
+            Providers =
+            {
+                new ProviderConfig
+                {
+                    Id = "openai",
+                    SupportsCodex = true,
+                    SupportsWebSockets = true,
+                    BaseUrl = upstream.BaseUrl,
+                    ApiKey = "provider-key",
+                    Protocol = ProviderProtocol.OpenAiResponses,
+                    DefaultModel = "gpt-5.5",
+                    Models =
+                    {
+                        new ModelRouteConfig
+                        {
+                            Id = "gpt-5.5",
+                            Protocol = ProviderProtocol.OpenAiResponses,
+                            UpstreamModel = "gpt-upstream"
+                        }
+                    }
+                }
+            }
+        };
+
+        using var authHttpClient = new HttpClient();
+        await using var service = new ProxyHostService(
+            meter,
+            calculator,
+            new UsageLogWriter(paths),
+            new CodexConfigWriter(paths),
+            new ClaudeCodeConfigWriter(paths),
+            new ProviderAuthService(configStore, config, authHttpClient),
+            [new OpenAiResponsesAdapter(new HttpClient())]);
+
+        await service.StartAsync(config);
+
+        using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{config.Proxy.Port}/v1/responses"), CancellationToken.None);
+
+        await SendWebSocketTextAsync(
+            socket,
+            """{"type":"response.create","event_id":"evt_1","model":"gpt-5.5","stream":true,"background":false,"input":"ping"}""");
+        var firstEvents = await ReadUntilWebSocketEventAsync(socket, "response.completed");
+
+        await SendWebSocketTextAsync(
+            socket,
+            """{"type":"response.create","event_id":"evt_2","model":"gpt-5.5","stream":true,"background":false,"input":"pong"}""");
+        var secondEvents = await ReadUntilWebSocketEventAsync(socket, "response.completed");
+
+        Assert.Contains(firstEvents, message => message.Contains("\"type\":\"response.created\"", StringComparison.Ordinal));
+        Assert.Contains(firstEvents, message => message.Contains("\"delta\":\"Hi 1\"", StringComparison.Ordinal));
+        Assert.Contains(secondEvents, message => message.Contains("\"delta\":\"Hi 2\"", StringComparison.Ordinal));
+        Assert.Equal(1, upstream.AcceptedConnectionCount);
+        Assert.Equal(2, upstream.CapturedMessages.Count);
+
+        using (var payload = JsonDocument.Parse(upstream.CapturedMessages[0]))
+        {
+            var root = payload.RootElement;
+            Assert.Equal("response.create", root.GetProperty("type").GetString());
+            Assert.Equal("gpt-upstream", root.GetProperty("model").GetString());
+            Assert.Equal("ping", root.GetProperty("input").GetString());
+            Assert.False(root.TryGetProperty("event_id", out _));
+            Assert.False(root.TryGetProperty("stream", out _));
+            Assert.False(root.TryGetProperty("background", out _));
+        }
+
+        await WaitUntilAsync(() => meter.Snapshot.Requests == 2);
+        Assert.Equal(2, meter.Snapshot.Requests);
+        Assert.Equal(6, meter.Snapshot.InputTokens);
+        Assert.Equal(8, meter.Snapshot.OutputTokens);
+    }
+
+    [Fact]
+    public async Task ProxyHostService_ResponsesWebSocket_ReturnsErrorForUnsupportedProvider()
+    {
+        var paths = CreatePaths("responses-websocket-unsupported");
+        var catalog = new ModelPricingCatalog();
+        var calculator = new PriceCalculator(catalog);
+        var meter = new UsageMeter(calculator);
+        var configStore = new ConfigurationStore(paths);
+        var config = new AppConfig
+        {
+            ActiveProviderId = "chat",
+            ActiveCodexProviderId = "chat",
+            Proxy =
+            {
+                Enabled = true,
+                Host = "127.0.0.1",
+                Port = GetAvailablePort()
+            },
+            Providers =
+            {
+                new ProviderConfig
+                {
+                    Id = "chat",
+                    SupportsCodex = true,
+                    SupportsWebSockets = true,
+                    BaseUrl = "https://upstream.test/v1",
+                    ApiKey = "provider-key",
+                    Protocol = ProviderProtocol.OpenAiChat,
+                    DefaultModel = "gpt-5.5"
+                }
+            }
+        };
+
+        using var authHttpClient = new HttpClient();
+        await using var service = new ProxyHostService(
+            meter,
+            calculator,
+            new UsageLogWriter(paths),
+            new CodexConfigWriter(paths),
+            new ClaudeCodeConfigWriter(paths),
+            new ProviderAuthService(configStore, config, authHttpClient),
+            Array.Empty<IProviderProtocolAdapter>());
+
+        await service.StartAsync(config);
+
+        using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{config.Proxy.Port}/v1/responses"), CancellationToken.None);
+        await SendWebSocketTextAsync(socket, """{"type":"response.create","model":"gpt-5.5","input":"ping"}""");
+        var error = await ReceiveWebSocketTextAsync(socket);
+
+        Assert.Contains("\"type\":\"error\"", error, StringComparison.Ordinal);
+        Assert.Contains("responses_websocket_not_supported", error, StringComparison.Ordinal);
+        await WaitUntilAsync(() => meter.Snapshot.Requests == 1);
+        Assert.Equal(1, meter.Snapshot.Requests);
+        Assert.Equal(1, meter.Snapshot.Errors);
+    }
+
+    [Fact]
+    public async Task ProxyHostService_ResponsesWebSocket_RetriesOAuthUpstreamConnectionAfterRefresh()
+    {
+        var paths = CreatePaths("responses-websocket-oauth-refresh");
+        var catalog = new ModelPricingCatalog();
+        var calculator = new PriceCalculator(catalog);
+        var meter = new UsageMeter(calculator);
+        await using var upstream = new FakeResponsesWebSocketServer(GetAvailablePort(), rejectFirstConnection: true);
+        var config = new AppConfig
+        {
+            ActiveProviderId = "oauth",
+            ActiveCodexProviderId = "oauth",
+            Proxy =
+            {
+                Enabled = true,
+                Host = "127.0.0.1",
+                Port = GetAvailablePort()
+            }
+        };
+        var provider = new ProviderConfig
+        {
+            Id = "oauth",
+            SupportsCodex = true,
+            SupportsWebSockets = true,
+            BaseUrl = upstream.BaseUrl,
+            AuthMode = ProviderAuthMode.OAuth,
+            Protocol = ProviderProtocol.OpenAiResponses,
+            DefaultModel = "gpt-5.5",
+            OAuth = new ProviderOAuthSettings
+            {
+                TokenUrl = "https://auth.test/token",
+                ClientId = "client-id",
+                UseJsonRefresh = true
+            },
+            ActiveAccountId = "account-1"
+        };
+        provider.OAuthAccounts.Add(new OAuthAccountConfig
+        {
+            Id = "account-1",
+            IsEnabled = true,
+            AccessToken = "old-token",
+            RefreshToken = "refresh-token"
+        });
+        provider.Models.Add(new ModelRouteConfig
+        {
+            Id = "gpt-5.5",
+            Protocol = ProviderProtocol.OpenAiResponses,
+            UpstreamModel = "gpt-upstream"
+        });
+        config.Providers.Add(provider);
+
+        var refreshCalls = 0;
+        using var authHttpClient = new HttpClient(new AsyncHandler((_, _) =>
+        {
+            Interlocked.Increment(ref refreshCalls);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"access_token":"fresh-token","refresh_token":"refresh-token","expires_in":3600}""",
+                    Encoding.UTF8,
+                    "application/json")
+            });
+        }));
+        await using var service = new ProxyHostService(
+            meter,
+            calculator,
+            new UsageLogWriter(paths),
+            new CodexConfigWriter(paths),
+            new ClaudeCodeConfigWriter(paths),
+            new ProviderAuthService(new ConfigurationStore(paths), config, authHttpClient),
+            [new OpenAiResponsesAdapter(new HttpClient())]);
+
+        await service.StartAsync(config);
+
+        using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{config.Proxy.Port}/v1/responses"), CancellationToken.None);
+        await SendWebSocketTextAsync(socket, """{"type":"response.create","model":"gpt-5.5","input":"ping"}""");
+        await ReadUntilWebSocketEventAsync(socket, "response.completed");
+
+        Assert.Equal(1, upstream.RejectedConnectionCount);
+        Assert.Equal(1, upstream.AcceptedConnectionCount);
+        Assert.Equal(1, refreshCalls);
+        Assert.Equal("Bearer fresh-token", Assert.Single(upstream.AcceptedAuthorizationHeaders));
+        Assert.Equal("fresh-token", provider.OAuthAccounts[0].AccessToken);
+        await WaitUntilAsync(() => meter.Snapshot.Requests == 1);
+        Assert.Equal(1, meter.Snapshot.Requests);
     }
 
     [Theory]
@@ -1384,6 +1749,16 @@ public sealed class UiV2InfrastructureTests : IDisposable
         Assert.Equal(
             "https://unpkg.com/@lobehub/icons-static-png@latest/dark/codex-color.png",
             icons.GetIconUrl("codex-color"));
+        Assert.Equal(
+            "https://unpkg.com/@lobehub/icons-static-png@latest/light/openai.png",
+            icons.GetIconUrl("openai", IconThemeVariant.Light));
+        Assert.Equal(
+            "https://unpkg.com/@lobehub/icons-static-png@latest/dark/openai.png",
+            icons.GetIconUrl("openai", IconThemeVariant.Dark));
+        Assert.True(File.Exists(icons.GetIconPath("codex-color")));
+        Assert.True(File.Exists(icons.GetIconPath("claudecode-color")));
+        Assert.Contains(Path.Combine("Assets", "icons"), icons.GetIconPath("codex-color"), StringComparison.Ordinal);
+        Assert.Contains(Path.Combine("Assets", "icons"), icons.GetIconPath("claudecode-color"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1779,6 +2154,90 @@ public sealed class UiV2InfrastructureTests : IDisposable
         return port;
     }
 
+    private static ProviderConfig CreateResponsesProvider(string id, string baseUrl)
+    {
+        return new ProviderConfig
+        {
+            Id = id,
+            SupportsCodex = true,
+            BaseUrl = baseUrl,
+            ApiKey = id + "-key",
+            Protocol = ProviderProtocol.OpenAiResponses,
+            DefaultModel = "switch-model",
+            Models =
+            {
+                new ModelRouteConfig
+                {
+                    Id = "switch-model",
+                    Protocol = ProviderProtocol.OpenAiResponses,
+                    UpstreamModel = "switch-upstream"
+                }
+            }
+        };
+    }
+
+    private static async Task PostResponsesAsync(HttpClient client, int port)
+    {
+        using var response = await client.PostAsync(
+            $"http://127.0.0.1:{port}/v1/responses",
+            new StringContent(
+                """{"model":"switch-model","input":"ping"}""",
+                Encoding.UTF8,
+                "application/json"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private static Task SendWebSocketTextAsync(WebSocket socket, string message)
+    {
+        return socket.SendAsync(
+            Encoding.UTF8.GetBytes(message),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            CancellationToken.None);
+    }
+
+    private static async Task<IReadOnlyList<string>> ReadUntilWebSocketEventAsync(
+        WebSocket socket,
+        string terminalType)
+    {
+        var messages = new List<string>();
+        while (true)
+        {
+            var message = await ReceiveWebSocketTextAsync(socket);
+            messages.Add(message);
+            if (message.Contains("\"type\":\"" + terminalType + "\"", StringComparison.Ordinal))
+                return messages;
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> predicate)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (predicate())
+                return;
+
+            await Task.Delay(20);
+        }
+
+        Assert.True(predicate());
+    }
+
+    private static async Task<string> ReceiveWebSocketTextAsync(WebSocket socket)
+    {
+        var buffer = new byte[16 * 1024];
+        using var stream = new MemoryStream();
+        while (true)
+        {
+            var result = await socket.ReceiveAsync(buffer, CancellationToken.None);
+            Assert.Equal(WebSocketMessageType.Text, result.MessageType);
+            stream.Write(buffer, 0, result.Count);
+            if (result.EndOfMessage)
+                return Encoding.UTF8.GetString(stream.ToArray());
+        }
+    }
+
     private static string CreateUnsignedJwt(string payloadJson)
     {
         return Base64Url("""{"alg":"none","typ":"JWT"}""") + "." +
@@ -1792,6 +2251,159 @@ public sealed class UiV2InfrastructureTests : IDisposable
             .TrimEnd('=')
             .Replace("+", "-", StringComparison.Ordinal)
             .Replace("/", "_", StringComparison.Ordinal);
+    }
+
+    private sealed class FakeResponsesWebSocketServer : IAsyncDisposable
+    {
+        private readonly HttpListener _listener = new();
+        private readonly CancellationTokenSource _stop = new();
+        private readonly Task _acceptLoop;
+        private readonly bool _rejectFirstConnection;
+        private readonly object _sync = new();
+        private readonly List<string> _capturedMessages = [];
+        private readonly List<string> _acceptedAuthorizationHeaders = [];
+        private int _connectionAttempts;
+        private int _acceptedConnectionCount;
+        private int _rejectedConnectionCount;
+        private int _messageCount;
+
+        public FakeResponsesWebSocketServer(int port, bool rejectFirstConnection = false)
+        {
+            _rejectFirstConnection = rejectFirstConnection;
+            BaseUrl = $"http://127.0.0.1:{port}/v1";
+            _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            _listener.Start();
+            _acceptLoop = Task.Run(AcceptLoopAsync);
+        }
+
+        public string BaseUrl { get; }
+
+        public int AcceptedConnectionCount => Volatile.Read(ref _acceptedConnectionCount);
+
+        public int RejectedConnectionCount => Volatile.Read(ref _rejectedConnectionCount);
+
+        public IReadOnlyList<string> CapturedMessages
+        {
+            get
+            {
+                lock (_sync)
+                    return _capturedMessages.ToArray();
+            }
+        }
+
+        public IReadOnlyList<string> AcceptedAuthorizationHeaders
+        {
+            get
+            {
+                lock (_sync)
+                    return _acceptedAuthorizationHeaders.ToArray();
+            }
+        }
+
+        private async Task AcceptLoopAsync()
+        {
+            while (!_stop.IsCancellationRequested)
+            {
+                HttpListenerContext context;
+                try
+                {
+                    context = await _listener.GetContextAsync().WaitAsync(_stop.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (HttpListenerException)
+                {
+                    return;
+                }
+
+                _ = Task.Run(() => HandleContextAsync(context));
+            }
+        }
+
+        private async Task HandleContextAsync(HttpListenerContext context)
+        {
+            if (!string.Equals(context.Request.Url?.AbsolutePath, "/v1/responses", StringComparison.Ordinal))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                context.Response.Close();
+                return;
+            }
+
+            var attempt = Interlocked.Increment(ref _connectionAttempts);
+            if (_rejectFirstConnection && attempt == 1)
+            {
+                Interlocked.Increment(ref _rejectedConnectionCount);
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.Close();
+                return;
+            }
+
+            if (!context.Request.IsWebSocketRequest)
+            {
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                context.Response.Close();
+                return;
+            }
+
+            var authorization = context.Request.Headers["Authorization"] ?? "";
+            lock (_sync)
+                _acceptedAuthorizationHeaders.Add(authorization);
+            Interlocked.Increment(ref _acceptedConnectionCount);
+
+            var webSocketContext = await context.AcceptWebSocketAsync(subProtocol: null);
+            using var socket = webSocketContext.WebSocket;
+            await HandleWebSocketAsync(socket);
+        }
+
+        private async Task HandleWebSocketAsync(WebSocket socket)
+        {
+            while (socket.State == WebSocketState.Open && !_stop.IsCancellationRequested)
+            {
+                string message;
+                try
+                {
+                    message = await ReceiveWebSocketTextAsync(socket);
+                }
+                catch
+                {
+                    return;
+                }
+
+                int index;
+                lock (_sync)
+                {
+                    _capturedMessages.Add(message);
+                    index = ++_messageCount;
+                }
+
+                foreach (var response in CreateResponseEvents(index))
+                    await SendWebSocketTextAsync(socket, response);
+            }
+        }
+
+        private static IEnumerable<string> CreateResponseEvents(int index)
+        {
+            yield return "{\"type\":\"response.created\",\"response\":{\"id\":\"resp_ws_" + index + "\",\"model\":\"gpt-upstream\"}}";
+            yield return "{\"type\":\"response.output_text.delta\",\"response_id\":\"resp_ws_" + index + "\",\"delta\":\"Hi " + index + "\"}";
+            yield return "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ws_" + index + "\",\"model\":\"gpt-upstream\",\"usage\":{\"input_tokens\":3,\"output_tokens\":4}}}";
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _stop.Cancel();
+            _listener.Stop();
+            try
+            {
+                await _acceptLoop;
+            }
+            catch
+            {
+            }
+            _listener.Close();
+            _stop.Dispose();
+        }
     }
 
     private sealed class AsyncHandler : HttpMessageHandler

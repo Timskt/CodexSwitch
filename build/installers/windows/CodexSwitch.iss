@@ -57,4 +57,5 @@ Name: "{group}\{#AppName}"; Filename: "{app}\CodexSwitch.exe"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\CodexSwitch.exe"; Tasks: desktopicon
 
 [Run]
+Filename: "{app}\CodexSwitch.exe"; Parameters: "--bootstrap-claude-config"; Flags: runhidden waituntilterminated runasoriginaluser
 Filename: "{app}\CodexSwitch.exe"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

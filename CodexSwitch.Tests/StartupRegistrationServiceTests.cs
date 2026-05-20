@@ -30,4 +30,13 @@ public sealed class StartupRegistrationServiceTests
     {
         Assert.Equal(expected, StartupLaunchOptions.ShouldStartHidden([argument]));
     }
+
+    [Theory]
+    [InlineData("--bootstrap-claude-config", true)]
+    [InlineData("--BOOTSTRAP-CLAUDE-CONFIG", true)]
+    [InlineData("--startup", false)]
+    public void ShouldBootstrapClaudeConfig_RecognizesBootstrapArgument(string argument, bool expected)
+    {
+        Assert.Equal(expected, StartupLaunchOptions.ShouldBootstrapClaudeConfig([argument]));
+    }
 }

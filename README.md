@@ -101,7 +101,7 @@ dotnet run --project CodexSwitch/CodexSwitch.csproj
 4. Set the provider as active.
 5. Keep the local proxy enabled. Codex clients can use `http://127.0.0.1:12785/v1`.
 
-When the proxy starts, CodexSwitch writes a managed Codex profile to the user's `.codex` directory. When the proxy stops, the original Codex files are restored from the local backup state.
+When the proxy starts, CodexSwitch writes managed `.codex` and `.claude` files and keeps the originals as same-name `.bak` backups. When the proxy stops, the originals are restored from those `.bak` files.
 
 If you need Codex App plugins, sign in to Codex App with ChatGPT first, then enable **Settings > Auth > Preserve Codex App ChatGPT login for plugins** before applying the proxy configuration. In that mode CodexSwitch still writes `config.toml`, but leaves the original `auth.json` login state in place.
 
@@ -117,10 +117,9 @@ On Windows, the main files are:
 | `%APPDATA%\CodexSwitch\model-pricing.json` | Editable pricing catalog used for cost estimates. |
 | `%APPDATA%\CodexSwitch\usage-logs\yyyy\MM\usage-yyyy-MM-dd.jsonl` | Partitioned local request usage logs. |
 | `%APPDATA%\CodexSwitch\icons\` | Cached provider and model icons. |
-| `%APPDATA%\CodexSwitch\backups\` | Backups made before Codex config/auth writes. |
-| `%APPDATA%\CodexSwitch\codex-restore-state.json` | State used to restore the original Codex files. |
-| `%USERPROFILE%\.codex\config.toml` | Managed Codex config while the proxy is enabled. |
-| `%USERPROFILE%\.codex\auth.json` | Managed Codex auth while the proxy is enabled, unless Codex App auth preservation is enabled. |
+| `%USERPROFILE%\.codex\config.toml` | Managed Codex config while the proxy is enabled; the original file is kept as `config.toml.bak`. |
+| `%USERPROFILE%\.codex\auth.json` | Managed Codex auth while the proxy is enabled, unless Codex App auth preservation is enabled; the original file is kept as `auth.json.bak`. |
+| `%USERPROFILE%\.claude\settings.json` | Managed Claude Code settings while the proxy is enabled; the original file is kept as `settings.json.bak`. |
 
 Treat the config files as sensitive because they can contain API keys and OAuth tokens.
 

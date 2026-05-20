@@ -10,39 +10,38 @@ public sealed class TrayMenuController : IDisposable
 {
     private readonly Application _application;
     private readonly IClassicDesktopStyleApplicationLifetime _desktop;
-    private readonly Window _mainWindow;
     private readonly MainWindowViewModel _viewModel;
+    private readonly Action _showMainWindow;
     private readonly I18nService _i18n;
     private readonly TrayIcon _trayIcon;
     private readonly NativeMenu _menu = new();
     private bool _isDisposed;
-    private bool _isExiting;
     private bool _refreshQueued;
 
     public TrayMenuController(
         Application application,
         IClassicDesktopStyleApplicationLifetime desktop,
-        Window mainWindow,
-        MainWindowViewModel viewModel)
+        MainWindowViewModel viewModel,
+        Action showMainWindow,
+        WindowIcon? icon)
     {
         _application = application;
         _desktop = desktop;
-        _mainWindow = mainWindow;
         _viewModel = viewModel;
+        _showMainWindow = showMainWindow;
         _i18n = I18nService.Current;
 
         _desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         _trayIcon = new TrayIcon
         {
-            Icon = mainWindow.Icon,
+            Icon = icon,
             Menu = _menu,
             IsVisible = true
         };
         _trayIcon.Clicked += OnTrayIconClicked;
         _menu.NeedsUpdate += OnMenuNeedsUpdate;
 
-        _mainWindow.Closing += OnMainWindowClosing;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _viewModel.ProviderRows.CollectionChanged += OnProviderRowsCollectionChanged;
         _i18n.LanguageChanged += OnLanguageChanged;
@@ -59,7 +58,6 @@ public sealed class TrayMenuController : IDisposable
         _isDisposed = true;
         _trayIcon.Clicked -= OnTrayIconClicked;
         _menu.NeedsUpdate -= OnMenuNeedsUpdate;
-        _mainWindow.Closing -= OnMainWindowClosing;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.ProviderRows.CollectionChanged -= OnProviderRowsCollectionChanged;
         _i18n.LanguageChanged -= OnLanguageChanged;
@@ -76,18 +74,6 @@ public sealed class TrayMenuController : IDisposable
     private void OnMenuNeedsUpdate(object? sender, EventArgs e)
     {
         RebuildMenu();
-    }
-
-    private void OnMainWindowClosing(object? sender, WindowClosingEventArgs e)
-    {
-        if (_isExiting ||
-            e.CloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown)
-        {
-            return;
-        }
-
-        e.Cancel = true;
-        _mainWindow.Hide();
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
@@ -248,18 +234,11 @@ public sealed class TrayMenuController : IDisposable
 
     private void ShowMainWindow()
     {
-        if (!_mainWindow.IsVisible)
-            _mainWindow.Show();
-
-        if (_mainWindow.WindowState == WindowState.Minimized)
-            _mainWindow.WindowState = WindowState.Normal;
-
-        _mainWindow.Activate();
+        _showMainWindow();
     }
 
     private void ExitApplication()
     {
-        _isExiting = true;
         if (_desktop is IControlledApplicationLifetime controlled)
             controlled.Shutdown(0);
         else

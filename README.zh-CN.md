@@ -101,7 +101,7 @@ dotnet run --project CodexSwitch/CodexSwitch.csproj
 4. 将供应商设置为当前激活。
 5. 保持本地代理启用。Codex 客户端可以使用 `http://127.0.0.1:12785/v1`。
 
-代理启动时，CodexSwitch 会向用户的 `.codex` 目录写入受管理的 Codex 配置。代理停止时，会根据本地备份状态恢复原始 Codex 文件。
+代理启动时，CodexSwitch 会写入受管理的 `.codex` 和 `.claude` 文件，并把原始文件保留为同名 `.bak` 备份。代理停止时，会从这些 `.bak` 文件恢复原始内容。
 
 如果需要使用 Codex App 插件，请先在 Codex App 中用 ChatGPT 登录，然后在 **设置 > 认证 > 保留 Codex App 的 ChatGPT 登录以支持插件** 中打开该选项，再应用代理配置。此模式下 CodexSwitch 仍会写入 `config.toml`，但会保留原来的 `auth.json` 登录态。
 
@@ -117,10 +117,9 @@ CodexSwitch 会把应用状态保存在用户的应用数据目录中。
 | `%APPDATA%\CodexSwitch\model-pricing.json` | 可编辑的模型价格目录，用于成本估算。 |
 | `%APPDATA%\CodexSwitch\usage-logs\yyyy\MM\usage-yyyy-MM-dd.jsonl` | 按日期分片的本地请求用量日志。 |
 | `%APPDATA%\CodexSwitch\icons\` | 缓存的供应商和模型图标。 |
-| `%APPDATA%\CodexSwitch\backups\` | 写入 Codex 配置和 auth 文件前创建的备份。 |
-| `%APPDATA%\CodexSwitch\codex-restore-state.json` | 用于恢复原始 Codex 文件的状态。 |
-| `%USERPROFILE%\.codex\config.toml` | 代理启用时写入的受管理 Codex 配置。 |
-| `%USERPROFILE%\.codex\auth.json` | 代理启用时写入的受管理 Codex auth 文件；开启 Codex App 登录态保留时不会覆盖。 |
+| `%USERPROFILE%\.codex\config.toml` | 代理启用时写入的受管理 Codex 配置；原始文件会保留为 `config.toml.bak`。 |
+| `%USERPROFILE%\.codex\auth.json` | 代理启用时写入的受管理 Codex auth 文件；开启 Codex App 登录态保留时不会覆盖，原始文件会保留为 `auth.json.bak`。 |
+| `%USERPROFILE%\.claude\settings.json` | 代理启用时写入的受管理 Claude Code 配置；原始文件会保留为 `settings.json.bak`。 |
 
 这些配置文件可能包含 API key 和 OAuth token，请按敏感文件处理。
 

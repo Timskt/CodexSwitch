@@ -15,12 +15,9 @@ public sealed class AppPaths
         UsageLogPath = Path.Combine(root, "usage-log.jsonl");
         UsageLogDirectory = Path.Combine(root, "usage-logs");
         IconDirectory = Path.Combine(root, "icons");
-        BackupDirectory = Path.Combine(root, "backups");
         UpdateDirectory = Path.Combine(root, "updates");
-        CodexRestoreStatePath = Path.Combine(root, "codex-restore-state.json");
         Directory.CreateDirectory(UsageLogDirectory);
         Directory.CreateDirectory(IconDirectory);
-        Directory.CreateDirectory(BackupDirectory);
         Directory.CreateDirectory(UpdateDirectory);
 
         var codexRoot = codexDirectory ?? Path.Combine(
@@ -38,7 +35,6 @@ public sealed class AppPaths
                     ".claude"));
         ClaudeDirectory = claudeRoot;
         ClaudeSettingsPath = Path.Combine(claudeRoot, "settings.json");
-        ClaudeRestoreStatePath = Path.Combine(root, "claude-restore-state.json");
     }
 
     public string RootDirectory { get; }
@@ -53,11 +49,7 @@ public sealed class AppPaths
 
     public string IconDirectory { get; }
 
-    public string BackupDirectory { get; }
-
     public string UpdateDirectory { get; }
-
-    public string CodexRestoreStatePath { get; }
 
     public string CodexDirectory { get; }
 
@@ -68,6 +60,4 @@ public sealed class AppPaths
     public string ClaudeDirectory { get; }
 
     public string ClaudeSettingsPath { get; }
-
-    public string ClaudeRestoreStatePath { get; }
 }

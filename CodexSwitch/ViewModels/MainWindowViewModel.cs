@@ -5,6 +5,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CodexSwitch.Controls;
 using CodexSwitch.I18n;
 using CodexSwitch.Models;
 using CodexSwitch.Proxy;
@@ -51,9 +52,19 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private readonly DispatcherTimer _miniStatusTimer;
     private readonly Dictionary<string, ProviderUsageQueryResult> _providerUsageResults = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _refreshingUsageProviders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _iconEnsureRequests = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ProviderUsageFailureState> _providerUsageFailures = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object BrushCacheSync = new();
     private static readonly Dictionary<string, IBrush> BrushCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly string[] UsageSharePalette =
+    [
+        "#60A5FA",
+        "#34D399",
+        "#F59E0B",
+        "#F472B6",
+        "#22D3EE",
+        "#A78BFA"
+    ];
     private AppConfig _config;
     private ModelPricingCatalog _pricing;
     private string _returnPage = "Home";
@@ -120,6 +131,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private string _usageDashboardTotalTokensText = DisplayFormatters.FormatTokenCount(0);
 
     [ObservableProperty]
+    private string _usageModelShareCaption = "";
+
+    [ObservableProperty]
+    private string _usageModelShareTotalLabel = "";
+
+    [ObservableProperty]
+    private string _usageModelShareTotalValue = "0";
+
+    [ObservableProperty]
     private ClientAppKind _selectedClientApp = ClientAppKind.Codex;
 
     [ObservableProperty]
@@ -169,6 +189,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     [ObservableProperty]
     private bool _selectedSupportsClaudeCode;
+
+    [ObservableProperty]
+    private bool _selectedSupportsWebSockets;
+
+    [ObservableProperty]
+    private bool _selectedCodexOneMillionContextEnabled;
 
     [ObservableProperty]
     private string _claudeCodeModel = "";
@@ -514,6 +540,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         UsageLogRows = [];
         UsageLogPageOptions = [];
         ProviderUsageChartItems = [];
+        ModelUsageShareItems = [];
         ModelUsageChartItems = [];
         TrendPoints = [];
         UsageFilterProviderOptions = [];
@@ -633,6 +660,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<UsageLogPageOption> UsageLogPageOptions { get; }
 
     public ObservableCollection<CodexRankedBarChartItem> ProviderUsageChartItems { get; }
+
+    public ObservableCollection<UsagePieChartItem> ModelUsageShareItems { get; }
 
     public ObservableCollection<CodexRankedBarChartItem> ModelUsageChartItems { get; }
 
@@ -817,10 +846,52 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         await _iconCacheService.EnsureDefaultIconsAsync();
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
+            RefreshProviderTemplates();
             RefreshClientApps();
             RefreshProviderRows();
             RefreshModelCatalogRows();
         });
+    }
+
+    private void QueueEnsureIcons(IEnumerable<string> iconSlugs)
+    {
+        var pending = new List<string>();
+        foreach (var iconSlug in iconSlugs)
+        {
+            if (_iconCacheService.HasIcon(iconSlug) || !_iconEnsureRequests.Add(iconSlug))
+                continue;
+
+            pending.Add(iconSlug);
+        }
+
+        if (pending.Count > 0)
+            _ = EnsureIconsInBackgroundAsync(pending);
+    }
+
+    private async Task EnsureIconsInBackgroundAsync(IReadOnlyList<string> iconSlugs)
+    {
+        var changed = false;
+        try
+        {
+            var results = await Task.WhenAll(iconSlugs.Select(iconSlug => _iconCacheService.EnsureIconAsync(iconSlug)));
+            changed = results.Any(result => result);
+        }
+        finally
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                foreach (var iconSlug in iconSlugs)
+                    _iconEnsureRequests.Remove(iconSlug);
+
+                if (!changed)
+                    return;
+
+                RefreshProviderTemplates();
+                RefreshClientApps();
+                RefreshProviderRows();
+                RefreshModelCatalogRows();
+            });
+        }
     }
 
     private void SelectClientApp(ClientAppItem? item)
@@ -849,6 +920,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _config.Ui.Theme = UiTheme;
         _store.SaveConfig(_config);
         AppThemeService.Apply(UiTheme);
+        RefreshProviderTemplates();
+        RefreshClientApps();
+        RefreshProviderRows();
+        RefreshModelCatalogRows();
         StatusMessage = F("status.themeSwitched", T("settings.theme." + UiTheme));
     }
 
@@ -1132,6 +1207,28 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnProxyStateDisplayChanged();
     }
 
+    private async Task ReloadProxyConfigAsync()
+    {
+        if (!_config.Proxy.Enabled)
+        {
+            _proxyHostService.UpdateConfig(_config);
+            OnProxyStateDisplayChanged();
+            return;
+        }
+
+        if (!_proxyHostService.State.IsRunning)
+        {
+            await RestartProxyAsync();
+            return;
+        }
+
+        var applied = _proxyHostService.ReloadConfig(_config);
+        StatusMessage = applied
+            ? T("status.proxyRunning")
+            : _proxyHostService.State.Error ?? T("status.proxyStopped");
+        OnProxyStateDisplayChanged();
+    }
+
     private async Task ActivateProviderAsync(ProviderListItem? row)
     {
         if (row is null)
@@ -1150,7 +1247,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         RefreshProviderRows();
         SelectProvider(FindProviderRow(row.ClientApp, row.Id));
         if (_config.Proxy.Enabled)
-            await RestartProxyAsync();
+            await ReloadProxyConfigAsync();
     }
 
     private void SelectProvider(ProviderListItem? row)
@@ -1336,10 +1433,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         provider.Protocol = SelectedProtocol;
         provider.SupportsCodex = SelectedSupportsCodex;
         provider.SupportsClaudeCode = SelectedSupportsClaudeCode;
+        provider.SupportsWebSockets = SelectedSupportsWebSockets;
         if (!provider.SupportsCodex && !provider.SupportsClaudeCode)
             provider.SupportsCodex = true;
         provider.OverrideRequestModel = SelectedOverrideModel;
         provider.ServiceTier = string.IsNullOrWhiteSpace(SelectedServiceTier) ? null : SelectedServiceTier.Trim();
+        provider.Codex ??= new CodexProviderSettings();
         provider.ClaudeCode ??= new ClaudeCodeProviderSettings();
         provider.ClaudeCode.Model = ResolveClaudeCodeModel(provider, ClaudeCodeModel);
         provider.ClaudeCode.AlwaysThinkingEnabled = ClaudeCodeThinkEnabled;
@@ -1394,6 +1493,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             });
         }
 
+        provider.Codex.EnableOneMillionContext = SelectedCodexOneMillionContextEnabled && provider.SupportsCodex;
+
         if (isNew)
         {
             _config.Providers.Add(provider);
@@ -1421,7 +1522,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             (string.Equals(_config.ActiveCodexProviderId, provider.Id, StringComparison.OrdinalIgnoreCase) ||
              string.Equals(_config.ActiveClaudeCodeProviderId, provider.Id, StringComparison.OrdinalIgnoreCase)))
         {
-            await RestartProxyAsync();
+            await ReloadProxyConfigAsync();
         }
     }
 
@@ -1439,6 +1540,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             SelectedProtocol = provider.Protocol;
             SelectedSupportsCodex = provider.SupportsCodex;
             SelectedSupportsClaudeCode = provider.SupportsClaudeCode;
+            SelectedSupportsWebSockets = provider.SupportsWebSockets == true;
+            SelectedCodexOneMillionContextEnabled = provider.Codex?.EnableOneMillionContext == true && provider.SupportsCodex;
             SelectedOverrideModel = provider.OverrideRequestModel;
             SelectedServiceTier = provider.ServiceTier ?? "";
             SelectedFastMode = provider.Cost?.FastMode ?? _config.GlobalCost.FastMode;
@@ -1500,6 +1603,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         finally
         {
             _isLoadingProviderFields = false;
+            OnPropertyChanged(nameof(IsSelectedCodexOneMillionContextAvailable));
         }
     }
 
@@ -1617,7 +1721,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         RefreshProviderRows();
         StatusMessage = T("status.claudeSettingsSaved");
         if (_config.Proxy.Enabled)
-            await RestartProxyAsync();
+            await ReloadProxyConfigAsync();
     }
 
     private void LoadUsageQueryFields(ProviderUsageQueryConfig query)
@@ -1922,6 +2026,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
+    private void RefreshSelectedCodexOneMillionContextAvailability()
+    {
+        OnPropertyChanged(nameof(IsSelectedCodexOneMillionContextAvailable));
+        if (!_isLoadingProviderFields && !IsSelectedCodexOneMillionContextAvailable)
+            SelectedCodexOneMillionContextEnabled = false;
+    }
+
     private void AddProviderModel()
     {
         var seed = string.IsNullOrWhiteSpace(SelectedDefaultModel) ? "new-model" : SelectedDefaultModel.Trim();
@@ -1999,7 +2110,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             StatusMessage = F("status.oauthLoggedIn", ProviderAuthService.ResolveAccountDisplayName(account));
             await RefreshProviderUsageQueryAsync(provider.Id, account.Id);
             if (_config.Proxy.Enabled)
-                await RestartProxyAsync();
+                await ReloadProxyConfigAsync();
         }
         catch (Exception ex)
         {
@@ -2048,7 +2159,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         SelectProvider(SelectedProviderRows.FirstOrDefault(row => row.IsActive) ?? SelectedProviderRows.FirstOrDefault());
         StatusMessage = T("status.providerRemoved");
         if ((wasCodexActive || wasClaudeActive) && _config.Proxy.Enabled)
-            await RestartProxyAsync();
+            await ReloadProxyConfigAsync();
     }
 
     private void SelectOAuthAccount(OAuthAccountListItem? row)
@@ -2367,8 +2478,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         ConfigurationStore.EnsureValidDefaults(_config);
         ProviderRows.Clear();
         ClaudeProviderRows.Clear();
+        var iconSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var provider in _config.Providers)
         {
+            iconSlugs.Add(ResolveProviderIconSlug(provider));
             if (provider.SupportsCodex)
                 ProviderRows.Add(CreateProviderRow(provider, ClientAppKind.Codex));
             if (provider.SupportsClaudeCode)
@@ -2381,11 +2494,18 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SelectedProviderRows));
         RefreshClaudeCodeFields();
         RefreshMiniStatus();
+        QueueEnsureIcons(iconSlugs);
+    }
+
+    private static string ResolveProviderIconSlug(ProviderConfig provider)
+    {
+        return provider.IconSlug ??
+            (provider.Protocol == ProviderProtocol.AnthropicMessages ? "claude" : "openai");
     }
 
     private ProviderListItem CreateProviderRow(ProviderConfig provider, ClientAppKind kind)
     {
-        var iconSlug = provider.IconSlug ?? (provider.Protocol == ProviderProtocol.AnthropicMessages ? "claude" : "openai");
+        var iconSlug = ResolveProviderIconSlug(provider);
         var activeAccount = ResolveUsageAccount(provider, null);
         var usage = CreateProviderUsageDisplay(provider, activeAccount);
         var activeId = kind == ClientAppKind.Codex ? _config.ActiveCodexProviderId : _config.ActiveClaudeCodeProviderId;
@@ -2570,8 +2690,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             : _config.ActiveCodexProviderId;
         var activeProvider = _config.Providers.FirstOrDefault(provider =>
             string.Equals(provider.Id, activeProviderId, StringComparison.OrdinalIgnoreCase));
-        var iconSlug = activeProvider?.IconSlug ??
-            (activeProvider?.Protocol == ProviderProtocol.AnthropicMessages ? "claude" : "openai");
+        var iconSlug = activeProvider is null ? "openai" : ResolveProviderIconSlug(activeProvider);
         MiniStatusProviderName = activeProvider is null
             ? "CodexSwitch"
             : string.IsNullOrWhiteSpace(activeProvider.DisplayName) ? activeProvider.Id : activeProvider.DisplayName;
@@ -2938,9 +3057,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private void RefreshModelCatalogRows()
     {
         ModelCatalogRows.Clear();
+        var iconSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var rule in _pricing.Models)
         {
             var iconSlug = IconCacheService.ResolveModelIconSlug(rule.Id, rule.IconSlug);
+            iconSlugs.Add(iconSlug);
             var providerIds = ProviderRoutingResolver.FindProvidersForPatterns(_config, [rule.Id, .. rule.Aliases]);
             var providerList = providerIds.Count == 0 ? "-" : string.Join(", ", providerIds);
             ModelCatalogRows.Add(new ModelCatalogItem
@@ -2964,6 +3085,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         OnPropertyChanged(nameof(ModelCatalogCountText));
+        QueueEnsureIcons(iconSlugs);
     }
 
     private void RefreshUsageDashboard(bool force = false)
@@ -3257,6 +3379,16 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             _hasUsageLogRowsSnapshot = false;
         }
 
+        var modelShare = CreateModelUsageShareItems(
+            filteredDashboard.ModelSummaries,
+            out var modelShareTotalLabel,
+            out var modelShareTotalValue,
+            out var modelShareCaption);
+
+        UsageModelShareTotalLabel = modelShareTotalLabel;
+        UsageModelShareTotalValue = modelShareTotalValue;
+        UsageModelShareCaption = modelShareCaption;
+        SyncCollection(ModelUsageShareItems, modelShare);
         SyncCollection(ProviderUsageChartItems, result.ProviderChartItems);
         SyncCollection(ModelUsageChartItems, result.ModelChartItems);
         SyncCollection(TrendPoints, result.TrendPoints, UsageTrendPointComparer.Instance);
@@ -3335,6 +3467,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    private sealed record UsageShareCandidate(
+        string Label,
+        double Value,
+        decimal Cost,
+        long Tokens,
+        long Requests);
+
     private void UnloadUsageDashboard()
     {
         CancelUsageDashboardRefresh();
@@ -3396,6 +3535,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             UsageMetrics.Count == 0 &&
             UsageLogRows.Count == 0 &&
             ProviderUsageChartItems.Count == 0 &&
+            ModelUsageShareItems.Count == 0 &&
             ModelUsageChartItems.Count == 0 &&
             TrendPoints.Count == 0)
         {
@@ -3405,6 +3545,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         UsageMetrics.Clear();
         UsageLogRows.Clear();
         ProviderUsageChartItems.Clear();
+        ModelUsageShareItems.Clear();
         ModelUsageChartItems.Clear();
         TrendPoints.Clear();
         UsageLogPage = 1;
@@ -3424,6 +3565,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _lastUsageLogRowsPage = 1;
         UsageDashboardEstimatedCostText = DisplayFormatters.FormatCost(0m);
         UsageDashboardTotalTokensText = DisplayFormatters.FormatTokenCount(0);
+        UsageModelShareCaption = "";
+        UsageModelShareTotalLabel = "";
+        UsageModelShareTotalValue = "0";
     }
 
     private void CancelUsageDashboardRefresh()
@@ -3660,6 +3804,80 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             .ToArray();
     }
 
+    private IReadOnlyList<UsagePieChartItem> CreateModelUsageShareItems(
+        IEnumerable<ModelUsageSummary> summaries,
+        out string totalLabel,
+        out string totalValue,
+        out string caption)
+    {
+        var source = summaries
+            .Where(summary => summary.Requests > 0)
+            .OrderByDescending(summary => summary.Requests)
+            .ToArray();
+        var totalRequests = source.Sum(summary => summary.Requests);
+
+        totalLabel = T("usage.metric.requests");
+        totalValue = totalRequests.ToString("N0", CultureInfo.InvariantCulture);
+        caption = T("usage.share.modelsCaption");
+
+        var candidates = source
+            .Select(summary => new UsageShareCandidate(
+                summary.Model,
+                summary.Requests,
+                summary.Cost,
+                summary.Tokens,
+                summary.Requests))
+            .Where(candidate => candidate.Value > 0d)
+            .OrderByDescending(candidate => candidate.Value)
+            .ToArray();
+        var total = candidates.Sum(candidate => candidate.Value);
+        if (total <= 0d)
+            return [];
+
+        var items = new List<UsagePieChartItem>();
+        foreach (var candidate in candidates.Take(UsageBreakdownChartItemLimit))
+        {
+            items.Add(CreateUsageShareItem(candidate, total, items.Count));
+        }
+
+        var other = candidates.Skip(UsageBreakdownChartItemLimit).ToArray();
+        if (other.Length > 0)
+        {
+            items.Add(CreateUsageShareItem(
+                new UsageShareCandidate(
+                    T("usage.share.other"),
+                    other.Sum(candidate => candidate.Value),
+                    other.Sum(candidate => candidate.Cost),
+                    other.Sum(candidate => candidate.Tokens),
+                    other.Sum(candidate => candidate.Requests)),
+                total,
+                items.Count));
+        }
+
+        return items;
+    }
+
+    private UsagePieChartItem CreateUsageShareItem(
+        UsageShareCandidate candidate,
+        double total,
+        int index)
+    {
+        return new UsagePieChartItem(
+            candidate.Label,
+            candidate.Value,
+            DisplayFormatters.FormatPercentage(candidate.Value / total),
+            FormatUsageShareDetail(candidate),
+            GetCachedBrush(UsageSharePalette[index % UsageSharePalette.Length]));
+    }
+
+    private string FormatUsageShareDetail(UsageShareCandidate candidate)
+    {
+        var tokens = $"{DisplayFormatters.FormatTokenCount(candidate.Tokens)} {T("usage.chart.tokens")}";
+        var requests = $"{candidate.Requests.ToString("N0", CultureInfo.InvariantCulture)} {T("usage.chart.requests")}";
+
+        return string.Join(" / ", requests, tokens, DisplayFormatters.FormatCost(candidate.Cost));
+    }
+
     private static IReadOnlyList<CodexRankedBarChartItem> CreateModelUsageChartItems(
         IEnumerable<ModelUsageSummary> summaries)
     {
@@ -3840,6 +4058,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             "No active provider" => T("proxy.noActiveProvider"),
             "Port unavailable" => T("proxy.portUnavailable"),
             "Start failed" => T("proxy.startFailed"),
+            "Config update failed" => T("proxy.configUpdateFailed"),
             _ => state.StatusText
         };
 
@@ -3976,6 +4195,18 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         if (value == ProviderProtocol.AnthropicMessages)
             SelectedSupportsClaudeCode = true;
+
+        RefreshSelectedCodexOneMillionContextAvailability();
+    }
+
+    partial void OnSelectedDefaultModelChanged(string value)
+    {
+        RefreshSelectedCodexOneMillionContextAvailability();
+    }
+
+    partial void OnSelectedSupportsCodexChanged(bool value)
+    {
+        RefreshSelectedCodexOneMillionContextAvailability();
     }
 
     partial void OnCurrentPageChanged(string value)
@@ -4268,6 +4499,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public string CodexIconPath => _iconCacheService.GetIconPath("codex-color");
 
     public string ClaudeCodeIconPath => _iconCacheService.GetIconPath("claudecode-color");
+
+    public bool IsSelectedCodexOneMillionContextAvailable => SelectedSupportsCodex;
 
     public bool IsClaudeOneMillionContextAvailable => ClaudeCodeConfigWriter.IsOneMillionContextModel(ClaudeCodeModel);
 

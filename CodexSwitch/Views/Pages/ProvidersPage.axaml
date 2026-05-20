@@ -40,19 +40,28 @@
         </Style>
         <Style Selector="Border.provider-usage">
             <Setter Property="Padding" Value="10,7"/>
-            <Setter Property="Background" Value="#B3171717"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource CodexSwitch.BorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource CodexSwitch.ProviderUsageBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CodexSwitch.ProviderUsageBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="{DynamicResource CodexSwitch.RadiusMd}"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.14"/>
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.14"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.provider-usage:pointerover">
+            <Setter Property="Background" Value="{DynamicResource CodexSwitch.ProviderUsageHoverBrush}"/>
         </Style>
         <Style Selector="Border.provider-usage.success">
-            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CodexSwitch.ProviderUsageBorderBrush}"/>
         </Style>
         <Style Selector="Border.provider-usage.error">
-            <Setter Property="BorderBrush" Value="#55FF6467"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CodexSwitch.DestructiveBrush}"/>
         </Style>
         <Style Selector="Border.provider-usage.refreshing">
-            <Setter Property="BorderBrush" Value="#4D5277FF"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CodexSwitch.ProviderCardActiveBorderBrush}"/>
         </Style>
         <Style Selector="Border.usage-status-dot">
             <Setter Property="Width" Value="6"/>

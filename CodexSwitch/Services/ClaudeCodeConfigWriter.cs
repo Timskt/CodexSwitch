@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json.Nodes;
 
 namespace CodexSwitch.Services;
@@ -24,7 +23,6 @@ public sealed class ClaudeCodeConfigWriter
         }
 
         Directory.CreateDirectory(_paths.ClaudeDirectory);
-        CaptureOriginalIfNeeded();
 
         var existing = File.Exists(_paths.ClaudeSettingsPath)
             ? File.ReadAllText(_paths.ClaudeSettingsPath)
@@ -52,36 +50,7 @@ public sealed class ClaudeCodeConfigWriter
 
     public void RestoreOriginal()
     {
-        if (!File.Exists(_paths.ClaudeRestoreStatePath))
-            return;
-
-        ClaudeCodeConfigRestoreState? state;
-        using (var stream = File.OpenRead(_paths.ClaudeRestoreStatePath))
-        {
-            state = JsonSerializer.Deserialize(stream, CodexSwitchJsonContext.Default.ClaudeCodeConfigRestoreState);
-        }
-
-        if (state is null)
-            return;
-
-        RestoreFile(_paths.ClaudeSettingsPath, state.SettingsExisted, state.SettingsJson);
-        File.Delete(_paths.ClaudeRestoreStatePath);
-    }
-
-    private void CaptureOriginalIfNeeded()
-    {
-        if (File.Exists(_paths.ClaudeRestoreStatePath))
-            return;
-
-        var state = new ClaudeCodeConfigRestoreState
-        {
-            SettingsExisted = File.Exists(_paths.ClaudeSettingsPath)
-        };
-        if (state.SettingsExisted)
-            state.SettingsJson = File.ReadAllText(_paths.ClaudeSettingsPath);
-
-        var json = JsonSerializer.Serialize(state, CodexSwitchJsonContext.Default.ClaudeCodeConfigRestoreState);
-        WriteTextAtomically(_paths.ClaudeRestoreStatePath, json + Environment.NewLine);
+        ManagedFileBackup.RestoreOriginal(_paths.ClaudeSettingsPath);
     }
 
     private ProviderConfig? ResolveClaudeCodeProvider(AppConfig config)
@@ -176,65 +145,25 @@ public sealed class ClaudeCodeConfigWriter
         return $"http://{host}:{port}";
     }
 
-    private void BackupIfExists(string path)
-    {
-        if (!File.Exists(path))
-            return;
-
-        Directory.CreateDirectory(_paths.BackupDirectory);
-        var name = Path.GetFileName(path);
-        var stamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmssfff");
-
-        for (var attempt = 0; ; attempt++)
-        {
-            var suffix = attempt == 0 ? string.Empty : $"-{attempt:D2}";
-            var backupPath = Path.Combine(_paths.BackupDirectory, $"{stamp}{suffix}-{name}.bak");
-
-            try
-            {
-                File.Copy(path, backupPath, overwrite: false);
-                return;
-            }
-            catch (IOException) when (File.Exists(backupPath))
-            {
-            }
-        }
-    }
-
     private void WriteTextIfChanged(string path, string content, string? existing = null)
     {
-        existing ??= File.Exists(path) ? File.ReadAllText(path) : null;
-        if (string.Equals(existing, content, StringComparison.Ordinal))
+        var fileExisted = File.Exists(path);
+        existing ??= fileExisted ? File.ReadAllText(path) : null;
+        if (fileExisted &&
+            string.Equals(existing, content, StringComparison.Ordinal) &&
+            !TextFileEncoding.HasUtf8Bom(path) &&
+            ManagedFileBackup.HasBackup(path))
             return;
 
-        BackupIfExists(path);
+        ManagedFileBackup.EnsureBackedUp(path);
         WriteTextAtomically(path, content);
-    }
-
-    private static void RestoreFile(string path, bool existed, string content)
-    {
-        if (existed)
-        {
-            WriteTextAtomically(path, content);
-            return;
-        }
-
-        if (File.Exists(path))
-            File.Delete(path);
     }
 
     private static void WriteTextAtomically(string path, string content)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var tempPath = path + ".tmp";
-        File.WriteAllText(tempPath, content, Encoding.UTF8);
+        File.WriteAllText(tempPath, content, TextFileEncoding.Utf8NoBom);
         File.Move(tempPath, path, overwrite: true);
     }
-}
-
-public sealed class ClaudeCodeConfigRestoreState
-{
-    public bool SettingsExisted { get; set; }
-
-    public string SettingsJson { get; set; } = "";
 }

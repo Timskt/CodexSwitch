@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using CodexSwitch.I18n;
 using CodexSwitch.ViewModels;
 
 namespace CodexSwitch.Controls;
@@ -11,25 +12,21 @@ public sealed class CsProviderContextMenu : ContextMenu
     private const double OpenOffsetY = -5;
     private static readonly TimeSpan OpenDuration = TimeSpan.FromMilliseconds(150);
 
-    private CsProviderContextMenu(MainWindowViewModel viewModel)
+    private CsProviderContextMenu(MainWindowViewModel viewModel, ProviderListItem provider)
     {
         Classes.Add("provider-menu");
 
-        Items.Add(CreateCaption());
-
-        if (viewModel.ProviderRows.Count == 0)
-        {
-            Items.Add(CreateEmptyItem());
-            return;
-        }
-
-        foreach (var provider in viewModel.ProviderRows)
-            Items.Add(CreateProviderItem(viewModel, provider));
+        Items.Add(CreateCaption(provider));
+        Items.Add(CreateSeparator());
+        Items.Add(CreateSelectItem(viewModel, provider));
+        Items.Add(CreateEditItem(provider));
+        Items.Add(CreateSeparator());
+        Items.Add(CreateDeleteItem(provider));
     }
 
-    public static void OpenFor(Control target, MainWindowViewModel viewModel)
+    public static void OpenFor(Control target, MainWindowViewModel viewModel, ProviderListItem provider)
     {
-        var menu = new CsProviderContextMenu(viewModel)
+        var menu = new CsProviderContextMenu(viewModel, provider)
         {
             Opacity = 0,
             Placement = PlacementMode.Pointer,
@@ -41,27 +38,32 @@ public sealed class CsProviderContextMenu : ContextMenu
         PlayOpenAnimation(menu);
     }
 
-    private static MenuItem CreateCaption()
+    private static MenuItem CreateCaption(ProviderListItem provider)
     {
-        var caption = new MenuItem { Header = "Select provider", IsEnabled = false };
+        var caption = new MenuItem
+        {
+            Header = CreateProviderHeader(provider),
+            IsEnabled = false
+        };
         caption.Classes.Add("provider-menu-caption");
         return caption;
     }
 
-    private static MenuItem CreateEmptyItem()
+    private static Separator CreateSeparator()
     {
-        var item = new MenuItem { Header = "No providers configured", IsEnabled = false };
-        item.Classes.Add("provider-menu-caption");
-        return item;
+        var separator = new Separator();
+        separator.Classes.Add("provider-menu-separator");
+        return separator;
     }
 
-    private static MenuItem CreateProviderItem(MainWindowViewModel viewModel, ProviderListItem provider)
+    private static MenuItem CreateSelectItem(MainWindowViewModel viewModel, ProviderListItem provider)
     {
         var item = new MenuItem
         {
-            Header = CreateProviderHeader(provider),
+            Header = CreateActionHeader(T("addProvider.setActive"), provider.ActiveText),
             Command = viewModel.SelectProviderCommand,
-            CommandParameter = provider
+            CommandParameter = provider,
+            IsEnabled = !provider.IsActive
         };
         item.Classes.Add("provider-menu-item");
 
@@ -71,7 +73,32 @@ public sealed class CsProviderContextMenu : ContextMenu
         if (provider.IsActive)
             item.Classes.Add("active-route");
 
-        ToolTip.SetTip(item, provider.ModelsText);
+        ToolTip.SetTip(item, provider.IsActive ? T("providers.active") : provider.ModelsText);
+        return item;
+    }
+
+    private static MenuItem CreateEditItem(ProviderListItem provider)
+    {
+        var item = new MenuItem
+        {
+            Header = CreateActionHeader(T("providers.edit")),
+            Command = provider.EditCommand,
+            CommandParameter = provider
+        };
+        item.Classes.Add("provider-menu-item");
+        return item;
+    }
+
+    private static MenuItem CreateDeleteItem(ProviderListItem provider)
+    {
+        var item = new MenuItem
+        {
+            Header = CreateActionHeader(T("providers.delete")),
+            Command = provider.DeleteCommand,
+            CommandParameter = provider
+        };
+        item.Classes.Add("provider-menu-item");
+        item.Classes.Add("danger");
         return item;
     }
 
@@ -113,7 +140,7 @@ public sealed class CsProviderContextMenu : ContextMenu
             Children = { name, meta }
         };
 
-        var stateText = provider.IsActive ? "Active" : provider.IsSelected ? "Selected" : "";
+        var stateText = provider.IsActive ? T("providers.active") : provider.IsSelected ? T("providers.current") : "";
         var state = new Border
         {
             IsVisible = !string.IsNullOrEmpty(stateText),
@@ -143,6 +170,44 @@ public sealed class CsProviderContextMenu : ContextMenu
         Grid.SetColumn(state, 2);
 
         return grid;
+    }
+
+    private static Grid CreateActionHeader(string title, string? meta = null)
+    {
+        var name = new TextBlock
+        {
+            Text = title,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        name.Classes.Add("provider-menu-name");
+
+        var detail = new TextBlock
+        {
+            Text = meta ?? "",
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            IsVisible = !string.IsNullOrWhiteSpace(meta)
+        };
+        detail.Classes.Add("provider-menu-meta");
+
+        var grid = new Grid
+        {
+            RowDefinitions =
+            {
+                new RowDefinition(GridLength.Auto),
+                new RowDefinition(GridLength.Auto)
+            },
+            RowSpacing = 1
+        };
+        grid.Children.Add(name);
+        grid.Children.Add(detail);
+        Grid.SetRow(detail, 1);
+
+        return grid;
+    }
+
+    private static string T(string key)
+    {
+        return I18nService.Current.Translate(key);
     }
 
     private static void PlayOpenAnimation(CsProviderContextMenu menu)

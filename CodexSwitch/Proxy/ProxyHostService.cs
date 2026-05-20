@@ -118,12 +118,19 @@ public sealed class ProxyHostService : IAsyncDisposable
             });
         });
 
+        builder.Services.AddHealthChecks();
         var app = builder.Build();
+        app.UseWebSockets(new WebSocketOptions
+        {
+            KeepAliveInterval = TimeSpan.FromSeconds(30)
+        });
         app.Use(ApplyLowLatencyClientConnectionAsync);
         app.MapGet("/health", WriteHealthAsync);
         app.MapGet("/v1/models", WriteModelsAsync);
+        app.MapGet("/v1/responses", HandleResponsesWebSocketAsync);
         app.MapPost("/v1/responses", HandleResponsesAsync);
         app.MapPost("/v1/messages", HandleMessagesAsync);
+        app.MapHealthChecks("/health");
 
         try
         {
@@ -140,11 +147,7 @@ public sealed class ProxyHostService : IAsyncDisposable
 
         try
         {
-            if (codexProvider is null)
-                _codexConfigWriter.RestoreOriginal();
-            else
-                _codexConfigWriter.Apply(config);
-            _claudeCodeConfigWriter.Apply(config);
+            ApplyManagedClientConfig(config);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -234,9 +237,75 @@ public sealed class ProxyHostService : IAsyncDisposable
             State.Error);
     }
 
+    public bool ReloadConfig(AppConfig config)
+    {
+        _config = config;
+        if (!State.IsRunning)
+            return true;
+
+        var provider = ResolveStateProvider(config);
+        try
+        {
+            ApplyManagedClientConfig(config);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SetState(
+                true,
+                "Config update failed",
+                config.Proxy.Endpoint,
+                provider?.Id ?? ResolveCodexProviderId(config),
+                provider?.Protocol.ToString() ?? "",
+                ex.Message);
+            return false;
+        }
+
+        SetState(
+            true,
+            "Running",
+            config.Proxy.Endpoint,
+            provider?.Id ?? ResolveCodexProviderId(config),
+            provider?.Protocol.ToString() ?? "",
+            null);
+        return true;
+    }
+
     public async ValueTask DisposeAsync()
     {
         await StopAsync();
+    }
+
+    private void ApplyManagedClientConfig(AppConfig config)
+    {
+        var codexProvider = ProviderRoutingResolver.ResolveActiveProvider(config, ClientAppKind.Codex);
+        if (codexProvider is null)
+            _codexConfigWriter.RestoreOriginal();
+        else
+            _codexConfigWriter.Apply(config);
+        _claudeCodeConfigWriter.Apply(config);
+    }
+
+    private async Task HandleResponsesWebSocketAsync(HttpContext httpContext)
+    {
+        if (!httpContext.WebSockets.IsWebSocketRequest)
+        {
+            await ProtocolAdapterCommon.WriteJsonErrorAsync(
+                httpContext,
+                StatusCodes.Status400BadRequest,
+                "Responses websocket endpoint requires a websocket upgrade request.",
+                httpContext.RequestAborted);
+            return;
+        }
+
+        using var socket = await httpContext.WebSockets.AcceptWebSocketAsync();
+        var proxy = new ResponsesWebSocketProxy(
+            () => _config,
+            _providerAuthService,
+            _responseStateStore,
+            _usageMeter,
+            _priceCalculator,
+            _usageLogWriter);
+        await proxy.HandleAsync(httpContext, socket, httpContext.RequestAborted);
     }
 
     private async Task HandleResponsesAsync(HttpContext httpContext)
@@ -467,6 +536,12 @@ public sealed class ProxyHostService : IAsyncDisposable
         return string.IsNullOrWhiteSpace(config.ActiveCodexProviderId)
             ? config.ActiveProviderId
             : config.ActiveCodexProviderId;
+    }
+
+    private static ProviderConfig? ResolveStateProvider(AppConfig config)
+    {
+        return ProviderRoutingResolver.ResolveActiveProvider(config, ClientAppKind.Codex) ??
+            ProviderRoutingResolver.ResolveActiveProvider(config, ClientAppKind.ClaudeCode);
     }
 
     private static ProviderCostSettings ResolveCostSettings(

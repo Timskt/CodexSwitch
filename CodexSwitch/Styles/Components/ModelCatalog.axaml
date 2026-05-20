@@ -5,7 +5,7 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <Border Name="ModelCardRoot"
-                        Background="{StaticResource CsCardBrush}"
+                        Background="{StaticResource CsModelCardBrush}"
                         BorderBrush="{StaticResource CsBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="{StaticResource CsRadiusXl}"
@@ -33,7 +33,7 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <Border Name="PriceChipRoot"
-                        Background="Transparent"
+                        Background="{StaticResource CsPriceChipBrush}"
                         BorderBrush="Transparent"
                         BorderThickness="1"
                         CornerRadius="{StaticResource CsRadiusMd}"
@@ -51,7 +51,7 @@
         </Setter>
     </Style>
     <Style Selector="ui|CsPriceChip:pointerover /template/ Border#PriceChipRoot">
-        <Setter Property="Background" Value="#0FFFFFFF"/>
+        <Setter Property="Background" Value="{StaticResource CsPriceChipHoverBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource CsBorderBrush}"/>
     </Style>
     <Style Selector="ui|CsPriceChip.input /template/ Border#PriceChipRoot">
@@ -74,12 +74,12 @@
         <Setter Property="Width" Value="36"/>
         <Setter Property="Height" Value="36"/>
         <Setter Property="CornerRadius" Value="{StaticResource CsRadiusLg}"/>
-        <Setter Property="Background" Value="#14FFFFFF"/>
+        <Setter Property="Background" Value="{StaticResource CsPriceChipBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource CsBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
     </Style>
     <Style Selector="Border.model-icon-shell:pointerover">
-        <Setter Property="Background" Value="#1FFFFFFF"/>
+        <Setter Property="Background" Value="{StaticResource CsPriceChipHoverBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource CsHoverBorderBrush}"/>
     </Style>
 
@@ -92,7 +92,7 @@
         <Setter Property="MinHeight" Value="82"/>
     </Style>
     <Style Selector="ui|CsTableRow.model-row:pointerover /template/ Border#TableRowRoot">
-        <Setter Property="Background" Value="#0FFFFFFF"/>
+        <Setter Property="Background" Value="{StaticResource CsModelCardHoverBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource CsHoverBorderBrush}"/>
     </Style>
 </Styles>

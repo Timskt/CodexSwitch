@@ -64,6 +64,9 @@
         <SolidColorBrush x:Key="CsProviderCardActiveBrush" Color="#142235"/>
         <SolidColorBrush x:Key="CsProviderCardActiveHoverBrush" Color="#172B45"/>
         <SolidColorBrush x:Key="CsProviderCardActivePressedBrush" Color="#102033"/>
+        <SolidColorBrush x:Key="CsProviderUsageBrush" Color="#CC020617"/>
+        <SolidColorBrush x:Key="CsProviderUsageHoverBrush" Color="#E6020617"/>
+        <SolidColorBrush x:Key="CsProviderUsageBorderBrush" Color="#334155"/>
         <SolidColorBrush x:Key="CsDialogCardBrush" Color="#F01A202C"/>
         <SolidColorBrush x:Key="CsDialogSectionBrush" Color="#13182025"/>
         <SolidColorBrush x:Key="CsDialogSectionHoverBrush" Color="#181E28"/>

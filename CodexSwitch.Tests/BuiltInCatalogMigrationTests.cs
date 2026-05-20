@@ -175,6 +175,64 @@ public sealed class BuiltInCatalogMigrationTests
     }
 
     [Fact]
+    public void CodexOAuthTemplate_EnablesWebSocketsByDefault()
+    {
+        var provider = ProviderTemplateCatalog.CreateProvider(ProviderTemplateCatalog.CodexOAuthBuiltinId, []);
+
+        Assert.True(provider.SupportsWebSockets == true);
+    }
+
+    [Fact]
+    public void LoadConfig_MigratesCodexOAuthWebSocketDefaultButPreservesExplicitFalse()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var paths = new AppPaths(root, Path.Combine(root, ".codex"));
+            var store = new ConfigurationStore(paths);
+            var legacy = new AppConfig
+            {
+                ActiveProviderId = "codex-oauth",
+                Providers =
+                {
+                    new ProviderConfig
+                    {
+                        Id = "codex-oauth",
+                        BuiltinId = ProviderTemplateCatalog.CodexOAuthBuiltinId,
+                        DisplayName = "Codex OAuth",
+                        BaseUrl = ProviderTemplateCatalog.CodexOAuthTemplate.BaseUrl,
+                        AuthMode = ProviderAuthMode.OAuth,
+                        Protocol = ProviderProtocol.OpenAiResponses,
+                        DefaultModel = ProviderTemplateCatalog.CodexOAuthTemplate.DefaultModel
+                    },
+                    new ProviderConfig
+                    {
+                        Id = "codex-oauth-disabled",
+                        BuiltinId = ProviderTemplateCatalog.CodexOAuthBuiltinId,
+                        DisplayName = "Codex OAuth Disabled",
+                        BaseUrl = ProviderTemplateCatalog.CodexOAuthTemplate.BaseUrl,
+                        AuthMode = ProviderAuthMode.OAuth,
+                        Protocol = ProviderProtocol.OpenAiResponses,
+                        DefaultModel = ProviderTemplateCatalog.CodexOAuthTemplate.DefaultModel,
+                        SupportsWebSockets = false
+                    }
+                }
+            };
+
+            WriteJson(paths.ConfigPath, legacy);
+
+            var upgraded = store.LoadConfig();
+
+            Assert.True(upgraded.Providers.Single(provider => provider.Id == "codex-oauth").SupportsWebSockets == true);
+            Assert.False(upgraded.Providers.Single(provider => provider.Id == "codex-oauth-disabled").SupportsWebSockets == true);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void LoadConfig_MigratesLegacyDeepSeekBuiltinToOpenAiChat()
     {
         var root = CreateTempDirectory();

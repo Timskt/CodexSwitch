@@ -13,6 +13,8 @@
         WindowDecorations="None"
         WindowStartupLocation="Manual"
         Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        TransparencyBackgroundFallback="Transparent"
         Topmost="True"
         PointerEntered="OnPointerEntered"
         PointerExited="OnPointerExited"

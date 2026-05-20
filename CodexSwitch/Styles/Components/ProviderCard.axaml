@@ -106,8 +106,8 @@
 
     <Style Selector="Border.provider-usage">
         <Setter Property="Padding" Value="10,7"/>
-        <Setter Property="Background" Value="#B3171717"/>
-        <Setter Property="BorderBrush" Value="{StaticResource CsBorderBrush}"/>
+        <Setter Property="Background" Value="{StaticResource CsProviderUsageBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CsProviderUsageBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="{StaticResource CsRadiusMd}"/>
         <Setter Property="Transitions">
@@ -118,17 +118,17 @@
         </Setter>
     </Style>
     <Style Selector="Border.provider-usage:pointerover">
-        <Setter Property="Background" Value="#CC171717"/>
-        <Setter Property="BorderBrush" Value="{StaticResource CsHoverBorderBrush}"/>
+        <Setter Property="Background" Value="{StaticResource CsProviderUsageHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CsProviderUsageBorderBrush}"/>
     </Style>
     <Style Selector="Border.provider-usage.success">
-        <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CsProviderUsageBorderBrush}"/>
     </Style>
     <Style Selector="Border.provider-usage.error">
-        <Setter Property="BorderBrush" Value="#55FF6467"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CsDestructiveBrush}"/>
     </Style>
     <Style Selector="Border.provider-usage.refreshing">
-        <Setter Property="BorderBrush" Value="#4D5277FF"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CsProviderCardActiveBrush}"/>
     </Style>
 
     <Style Selector="Border.usage-status-dot">

@@ -103,6 +103,7 @@ public sealed class OpenAiResponsesAdapterMessagesTests
         var tool = root.GetProperty("tools")[0];
         Assert.Equal("function", tool.GetProperty("type").GetString());
         Assert.Equal("lookup", tool.GetProperty("name").GetString());
+        Assert.False(tool.GetProperty("strict").GetBoolean());
         Assert.Equal(JsonValueKind.Object, tool.GetProperty("parameters").ValueKind);
         Assert.Equal("function", root.GetProperty("tool_choice").GetProperty("type").GetString());
         Assert.Equal("lookup", root.GetProperty("tool_choice").GetProperty("name").GetString());
@@ -138,6 +139,288 @@ public sealed class OpenAiResponsesAdapterMessagesTests
         Assert.Equal(17, fixture.UsageMeter.Snapshot.InputTokens);
         Assert.Equal(3, fixture.UsageMeter.Snapshot.CachedInputTokens);
         Assert.Equal(5, fixture.UsageMeter.Snapshot.OutputTokens);
+    }
+
+    [Fact]
+    public async Task HandleMessagesAsync_RequestOptions_MapsClaudeSpecificControlsToResponses()
+    {
+        using var requestDocument = JsonDocument.Parse(
+            """
+            {
+              "model": "deepseek-v4-flash",
+              "system": "Return JSON.",
+              "max_tokens": 64,
+              "service_tier": "standard_only",
+              "metadata": { "uerd_id": "user-123", "feature": "claude-code" },
+              "cache_control": { "type": "ephemeral" },
+              "inference_geo": "us",
+              "output_config": {
+                "format": {
+                  "type": "json_schema",
+                  "strict": true,
+                  "schema": {
+                    "title": "LookupResult",
+                    "type": "object",
+                    "properties": {
+                      "answer": { "type": "string" }
+                    }
+                  }
+                }
+              },
+              "tools": [
+                {
+                  "name": "lookup",
+                  "description": "Look up a value.",
+                  "strict": true,
+                  "input_schema": {
+                    "type": "object",
+                    "properties": {
+                      "query": { "type": "string" }
+                    }
+                  }
+                },
+                {
+                  "type": "web_search_20250305",
+                  "name": "web_search",
+                  "max_uses": 1
+                }
+              ],
+              "tool_choice": { "type": "auto", "disable_parallel_tool_use": true },
+              "messages": [
+                { "role": "user", "content": "Find codex." }
+              ]
+            }
+            """);
+
+        using var fixture = new AdapterFixture(
+            requestDocument,
+            """
+            {
+              "id": "resp_options",
+              "object": "response",
+              "status": "completed",
+              "model": "deepseek-upstream",
+              "output": [
+                {
+                  "id": "msg_1",
+                  "type": "message",
+                  "role": "assistant",
+                  "content": [{ "type": "output_text", "text": "{\"answer\":\"Done\"}" }]
+                }
+              ],
+              "usage": {
+                "input_tokens": 9,
+                "output_tokens": 4
+              }
+            }
+            """);
+
+        await fixture.InvokeAsync();
+
+        using var upstreamPayload = JsonDocument.Parse(fixture.Handler.Requests[0].Body);
+        var root = upstreamPayload.RootElement;
+        Assert.Equal("default", root.GetProperty("service_tier").GetString());
+        Assert.Equal("user-123", root.GetProperty("prompt_cache_key").GetString());
+        Assert.False(root.TryGetProperty("metadata", out _));
+        Assert.False(root.TryGetProperty("safety_identifier", out _));
+        Assert.False(root.GetProperty("parallel_tool_calls").GetBoolean());
+        Assert.False(root.TryGetProperty("cache_control", out _));
+        Assert.False(root.TryGetProperty("inference_geo", out _));
+        Assert.False(root.TryGetProperty("output_config", out _));
+
+        var format = root.GetProperty("text").GetProperty("format");
+        Assert.Equal("json_schema", format.GetProperty("type").GetString());
+        Assert.Equal("LookupResult", format.GetProperty("name").GetString());
+        Assert.True(format.GetProperty("strict").GetBoolean());
+        Assert.Equal("object", format.GetProperty("schema").GetProperty("type").GetString());
+
+        var tools = root.GetProperty("tools").EnumerateArray().ToArray();
+        Assert.Single(tools);
+        Assert.Equal("lookup", tools[0].GetProperty("name").GetString());
+        Assert.True(tools[0].GetProperty("strict").GetBoolean());
+        Assert.True(tools[0].GetProperty("parameters").GetProperty("additionalProperties").ValueKind == JsonValueKind.False);
+        Assert.Equal("query", tools[0].GetProperty("parameters").GetProperty("required")[0].GetString());
+        Assert.Equal("auto", root.GetProperty("tool_choice").GetString());
+    }
+
+    [Fact]
+    public async Task HandleMessagesAsync_RequestOptions_UsesStableDefaultPromptCacheKeyWhenMetadataUserIdIsMissing()
+    {
+        using var firstRequestDocument = JsonDocument.Parse(
+            """
+            {
+              "model": "deepseek-v4-flash",
+              "metadata": { "feature": "claude-code" },
+              "max_tokens": 64,
+              "messages": [
+                { "role": "user", "content": "First." }
+              ]
+            }
+            """);
+        using var secondRequestDocument = JsonDocument.Parse(
+            """
+            {
+              "model": "deepseek-v4-flash",
+              "max_tokens": 64,
+              "messages": [
+                { "role": "user", "content": "Second." }
+              ]
+            }
+            """);
+
+        using var firstFixture = new AdapterFixture(firstRequestDocument, BasicResponsesBody());
+        using var secondFixture = new AdapterFixture(secondRequestDocument, BasicResponsesBody());
+
+        await firstFixture.InvokeAsync();
+        await secondFixture.InvokeAsync();
+
+        using var firstPayload = JsonDocument.Parse(firstFixture.Handler.Requests[0].Body);
+        using var secondPayload = JsonDocument.Parse(secondFixture.Handler.Requests[0].Body);
+        var firstKey = firstPayload.RootElement.GetProperty("prompt_cache_key").GetString();
+        var secondKey = secondPayload.RootElement.GetProperty("prompt_cache_key").GetString();
+
+        Assert.False(firstPayload.RootElement.TryGetProperty("metadata", out _));
+        Assert.False(string.IsNullOrWhiteSpace(firstKey));
+        Assert.StartsWith("codexswitch-", firstKey);
+        Assert.Equal(firstKey, secondKey);
+    }
+
+    [Fact]
+    public async Task HandleMessagesAsync_OpenAiReasoningHistory_DropsClaudeThinkingAndKeepsToolTurnCompatible()
+    {
+        using var requestDocument = JsonDocument.Parse(
+            """
+            {
+              "model": "gpt-5.5",
+              "max_tokens": 64,
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "Use lookup."
+                },
+                {
+                  "role": "assistant",
+                  "content": [
+                    { "type": "thinking", "thinking": "Need lookup." },
+                    { "type": "tool_use", "id": "call_lookup_1", "name": "lookup", "input": { "query": "codex" } }
+                  ]
+                },
+                {
+                  "role": "user",
+                  "content": [
+                    { "type": "tool_result", "tool_use_id": "call_lookup_1", "content": "Codex found." }
+                  ]
+                }
+              ],
+              "tools": [
+                {
+                  "name": "lookup",
+                  "input_schema": {
+                    "type": "object",
+                    "properties": {
+                      "query": { "type": "string" }
+                    },
+                    "required": ["query"]
+                  }
+                }
+              ]
+            }
+            """);
+
+        using var fixture = new AdapterFixture(
+            requestDocument,
+            BasicResponsesBody(),
+            modelId: "gpt-5.5",
+            upstreamModel: "gpt-5.5",
+            providerDisplayName: "OpenAI Official",
+            providerDefaultModel: "gpt-5.5");
+
+        await fixture.InvokeAsync();
+
+        using var upstreamPayload = JsonDocument.Parse(fixture.Handler.Requests[0].Body);
+        var input = upstreamPayload.RootElement.GetProperty("input").EnumerateArray().ToArray();
+
+        Assert.Equal("message", input[0].GetProperty("type").GetString());
+        Assert.Equal("function_call", input[1].GetProperty("type").GetString());
+        Assert.False(input[1].TryGetProperty("status", out _));
+        Assert.Equal("call_lookup_1", input[1].GetProperty("call_id").GetString());
+        Assert.Equal("function_call_output", input[2].GetProperty("type").GetString());
+        Assert.Equal("call_lookup_1", input[2].GetProperty("call_id").GetString());
+        Assert.DoesNotContain(input, item => item.GetProperty("type").GetString() == "reasoning");
+        Assert.DoesNotContain(
+            input,
+            item => item.GetProperty("type").GetString() == "message" &&
+                item.GetProperty("role").GetString() == "assistant" &&
+                item.GetProperty("content").GetArrayLength() == 0);
+    }
+
+    [Fact]
+    public async Task HandleMessagesAsync_ToolResultContentBlocks_ConvertsToResponsesOutputContentArray()
+    {
+        using var requestDocument = JsonDocument.Parse(
+            """
+            {
+              "model": "gpt-5.5",
+              "max_tokens": 64,
+              "messages": [
+                {
+                  "role": "assistant",
+                  "content": [
+                    { "type": "tool_use", "id": "call_lookup_1", "name": "lookup", "input": { "query": "codex" } }
+                  ]
+                },
+                {
+                  "role": "user",
+                  "content": [
+                    {
+                      "type": "tool_result",
+                      "tool_use_id": "call_lookup_1",
+                      "content": [
+                        { "type": "text", "text": "Screenshot attached." },
+                        {
+                          "type": "image",
+                          "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": "aGVsbG8="
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "tools": [
+                {
+                  "name": "lookup",
+                  "input_schema": {
+                    "type": "object",
+                    "properties": {
+                      "query": { "type": "string" }
+                    }
+                  }
+                }
+              ]
+            }
+            """);
+
+        using var fixture = new AdapterFixture(
+            requestDocument,
+            BasicResponsesBody(),
+            modelId: "gpt-5.5",
+            upstreamModel: "gpt-5.5",
+            providerDisplayName: "OpenAI Official",
+            providerDefaultModel: "gpt-5.5");
+
+        await fixture.InvokeAsync();
+
+        using var upstreamPayload = JsonDocument.Parse(fixture.Handler.Requests[0].Body);
+        var output = upstreamPayload.RootElement.GetProperty("input")[1].GetProperty("output");
+        Assert.Equal(JsonValueKind.Array, output.ValueKind);
+        Assert.Equal("input_text", output[0].GetProperty("type").GetString());
+        Assert.Equal("Screenshot attached.", output[0].GetProperty("text").GetString());
+        Assert.Equal("input_image", output[1].GetProperty("type").GetString());
+        Assert.Equal("data:image/png;base64,aGVsbG8=", output[1].GetProperty("image_url").GetString());
     }
 
     [Fact]
@@ -216,7 +499,14 @@ public sealed class OpenAiResponsesAdapterMessagesTests
         private readonly AppPaths _paths;
         private readonly UsageLogWriter _usageLogWriter;
 
-        public AdapterFixture(JsonDocument requestDocument, string upstreamBody, string mediaType = "application/json")
+        public AdapterFixture(
+            JsonDocument requestDocument,
+            string upstreamBody,
+            string mediaType = "application/json",
+            string modelId = "deepseek-v4-flash",
+            string upstreamModel = "deepseek-upstream",
+            string providerDisplayName = "DeepSeek Responses",
+            string providerDefaultModel = "deepseek-v4-flash")
         {
             var root = Path.Combine(Path.GetTempPath(), "CodexSwitch.Tests", Guid.NewGuid().ToString("N"));
             _paths = new AppPaths(
@@ -233,19 +523,19 @@ public sealed class OpenAiResponsesAdapterMessagesTests
             var provider = new ProviderConfig
             {
                 Id = "provider-openai-responses",
-                DisplayName = "DeepSeek Responses",
+                DisplayName = providerDisplayName,
                 Protocol = ProviderProtocol.OpenAiResponses,
                 BaseUrl = "https://upstream.example/v1",
                 ApiKey = "provider-secret",
-                DefaultModel = "deepseek-v4-flash",
+                DefaultModel = providerDefaultModel,
                 SupportsClaudeCode = true
             };
 
             var route = new ModelRouteConfig
             {
-                Id = "deepseek-v4-flash",
+                Id = modelId,
                 Protocol = ProviderProtocol.OpenAiResponses,
-                UpstreamModel = "deepseek-upstream"
+                UpstreamModel = upstreamModel
             };
 
             provider.Models.Add(route);
@@ -352,4 +642,28 @@ public sealed class OpenAiResponsesAdapterMessagesTests
         Uri? RequestUri,
         System.Net.Http.Headers.AuthenticationHeaderValue? Authorization,
         string Body);
+
+    private static string BasicResponsesBody()
+    {
+        return """
+        {
+          "id": "resp_basic",
+          "object": "response",
+          "status": "completed",
+          "model": "deepseek-upstream",
+          "output": [
+            {
+              "id": "msg_basic",
+              "type": "message",
+              "role": "assistant",
+              "content": [{ "type": "output_text", "text": "Done." }]
+            }
+          ],
+          "usage": {
+            "input_tokens": 1,
+            "output_tokens": 1
+          }
+        }
+        """;
+    }
 }

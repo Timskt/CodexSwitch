@@ -107,6 +107,11 @@ public sealed class ProviderConfig
 
     public bool SupportsClaudeCode { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? SupportsWebSockets { get; set; }
+
+    public CodexProviderSettings Codex { get; set; } = new();
+
     public ClaudeCodeProviderSettings ClaudeCode { get; set; } = new();
 
     public bool OverrideRequestModel { get; set; }
@@ -130,6 +135,11 @@ public sealed class ProviderConfig
     public ProviderRequestOverrides? RequestOverrides { get; set; }
 
     public ProviderUsageQueryConfig? UsageQuery { get; set; }
+}
+
+public sealed class CodexProviderSettings
+{
+    public bool EnableOneMillionContext { get; set; }
 }
 
 public sealed class ClaudeCodeProviderSettings

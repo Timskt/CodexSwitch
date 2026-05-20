@@ -477,7 +477,7 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
             return TryGetString(incompleteDetails, "reason") switch
             {
                 "max_output_tokens" => "max_tokens",
-                "content_filter" => "stop_sequence",
+                "content_filter" => "refusal",
                 _ => "end_turn"
             };
         }
@@ -705,6 +705,20 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
                 toolCall.Arguments.Append(arguments);
             await EnsureResponsesToolBlockStartedAsync(httpContext, state, toolCall, cancellationToken);
             await StopResponsesToolBlockAsync(httpContext, state, toolCall, cancellationToken);
+            return;
+        }
+
+        if (string.Equals(type, "reasoning", StringComparison.Ordinal) && state.ThinkingText.Length == 0)
+        {
+            foreach (var thinking in ExtractReasoningTextParts(item))
+                await EmitResponsesThinkingDeltaAsync(httpContext, state, thinking, cancellationToken);
+            return;
+        }
+
+        if (string.Equals(type, "message", StringComparison.Ordinal) && state.MessageText.Length == 0)
+        {
+            foreach (var text in ExtractResponsesMessageTextParts(item))
+                await EmitResponsesTextDeltaAsync(httpContext, state, text, cancellationToken);
         }
     }
 

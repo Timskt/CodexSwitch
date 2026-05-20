@@ -1,3 +1,23 @@
+## [v0.0.10] - 2026-05-20
+
+### Added
+
+- Added Responses WebSocket proxy support for providers that expose the OpenAI Responses websocket flow.
+- Added Claude bootstrap config handling so the installer and startup path can seed `.claude` settings automatically.
+- Added bundled macOS app icon and dock integration for the refreshed desktop shell.
+
+### Changed
+
+- Reworked Codex and Claude config writers to preserve user-authored settings, keep originals as same-name `.bak` backups, and restore from those backups on exit.
+- Refreshed icon resolution and caching to prefer bundled Codex, Claude, and Xiaomi assets with theme-aware defaults.
+- Updated the desktop shell, provider dialogs, home/models/providers/settings pages, and localized copy for the new UI pass.
+- Updated release packaging to ship the app icon on macOS and trigger Claude bootstrap during installation.
+
+### Fixed
+
+- Preserved real Codex App auth state while ignoring the local fake auth fixture.
+- Tightened OpenAI Responses and Anthropic payload handling, startup registration, and tray/window lifecycle behavior.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

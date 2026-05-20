@@ -105,10 +105,17 @@ public sealed class StartupRegistrationService
 
 public static class StartupLaunchOptions
 {
+    public const string BootstrapClaudeConfigArgument = "--bootstrap-claude-config";
+
     public static bool ShouldStartHidden(IEnumerable<string> args)
     {
         return args.Any(arg =>
             string.Equals(arg, StartupRegistrationService.StartupArgument, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(arg, "--start-minimized", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static bool ShouldBootstrapClaudeConfig(IEnumerable<string> args)
+    {
+        return args.Any(arg => string.Equals(arg, BootstrapClaudeConfigArgument, StringComparison.OrdinalIgnoreCase));
     }
 }

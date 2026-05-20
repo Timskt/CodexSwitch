@@ -20,14 +20,16 @@ public partial class ProvidersPage : UserControl
 
     private void ProviderContextHost_OnPointerPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
     {
-        if (sender is not Control target ||
-            DataContext is not MainWindowViewModel viewModel ||
-            !e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+        if (DataContext is not MainWindowViewModel viewModel ||
+            !e.GetCurrentPoint(this).Properties.IsRightButtonPressed ||
+            e.Source is not Control source ||
+            FindProviderRow(source) is not { } row ||
+            row.DataContext is not ProviderListItem item)
         {
             return;
         }
 
-        CsProviderContextMenu.OpenFor(target, viewModel);
+        CsProviderContextMenu.OpenFor(row, viewModel, item);
         e.Handled = true;
     }
 
@@ -231,6 +233,9 @@ public partial class ProvidersPage : UserControl
 
     private static Control? FindProviderRow(Control source)
     {
+        if (source.Classes.Contains("provider-list-row"))
+            return source;
+
         return source.GetVisualAncestors()
             .OfType<Control>()
             .FirstOrDefault(control => control.Classes.Contains("provider-list-row"));

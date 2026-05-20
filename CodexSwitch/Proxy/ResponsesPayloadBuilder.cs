@@ -11,6 +11,16 @@ public static class ResponsesPayloadBuilder
         ModelRouteConfig? model,
         ProviderCostSettings costSettings)
     {
+        return Build(root, provider, model, costSettings, []);
+    }
+
+    public static byte[] Build(
+        JsonElement root,
+        ProviderConfig provider,
+        ModelRouteConfig? model,
+        ProviderCostSettings costSettings,
+        IEnumerable<string> extraOmitKeys)
+    {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
@@ -22,6 +32,11 @@ public static class ResponsesPayloadBuilder
             var omitKeys = overrides?.OmitBodyKeys
                 .Where(key => !string.IsNullOrWhiteSpace(key))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+            foreach (var key in extraOmitKeys)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                    omitKeys.Add(key);
+            }
 
             foreach (var property in root.EnumerateObject())
             {

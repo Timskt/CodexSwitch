@@ -87,6 +87,7 @@ public sealed class ConfigurationStore
         MigrateBuiltInProviders(config);
         EnsureRequiredBuiltIns(config);
         EnsureProviderClientSupport(config);
+        EnsureProviderCodexSettings(config);
         EnsureProviderClaudeCodeSettings(config);
         EnsureProviderModelConversions(config);
         EnsureProviderUsageQueries(config);
@@ -209,6 +210,12 @@ public sealed class ConfigurationStore
             if (string.IsNullOrWhiteSpace(provider.ClaudeCode.Model))
                 provider.ClaudeCode.Model = ResolveDefaultClaudeCodeModel(provider);
         }
+    }
+
+    private static void EnsureProviderCodexSettings(AppConfig config)
+    {
+        foreach (var provider in config.Providers)
+            provider.Codex ??= new CodexProviderSettings();
     }
 
     private static void EnsureActiveProvider(AppConfig config, ClientAppKind kind)
@@ -465,6 +472,9 @@ public sealed class ConfigurationStore
             provider.SupportsCodex = template.SupportsCodex;
             provider.SupportsClaudeCode = template.SupportsClaudeCode;
         }
+        if (provider.SupportsWebSockets is null && template.SupportsWebSockets)
+            provider.SupportsWebSockets = true;
+        provider.Codex ??= new CodexProviderSettings();
         provider.ClaudeCode ??= new ClaudeCodeProviderSettings();
         if (string.IsNullOrWhiteSpace(provider.ClaudeCode.Model))
             provider.ClaudeCode.Model = ResolveDefaultClaudeCodeModel(provider);
