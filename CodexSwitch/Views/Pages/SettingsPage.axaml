@@ -65,7 +65,7 @@
             </ui:CsSegmentedControl>
 
             <Grid Grid.Row="2"
-                  RowDefinitions="Auto,Auto,Auto,Auto"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="16">
                 <ui:CsSection Title="{i18n:Tr settings.language.title}"
                               Description="{i18n:Tr settings.language.description}"
@@ -170,6 +170,44 @@
                         <ui:CsSwitch Content="{i18n:Tr settings.outboundProxy.bypassLocal}"
                                      IsChecked="{Binding NetworkProxyBypassOnLocal}"/>
                     </StackPanel>
+                </ui:CsSection>
+
+                <ui:CsSection Grid.Row="2"
+                              Title="{i18n:Tr settings.outboundConnection.title}"
+                              Description="{i18n:Tr settings.outboundConnection.description}"
+                              IsVisible="{Binding IsRouteSettingsVisible}">
+                    <Grid ColumnDefinitions="*,160"
+                          ColumnSpacing="12">
+                        <ui:CsField Label="{i18n:Tr settings.outboundConnection.httpVersion}">
+                            <ui:CsSelect ItemsSource="{Binding HttpVersionOptions}"
+                                         SelectedItem="{Binding NetworkHttpVersion, Mode=TwoWay}"/>
+                        </ui:CsField>
+                        <ui:CsField Grid.Column="1" Label="{i18n:Tr settings.outboundConnection.connectTimeout}">
+                            <ui:CsInput Text="{Binding NetworkConnectTimeoutSeconds}"/>
+                        </ui:CsField>
+                    </Grid>
+                </ui:CsSection>
+
+                <ui:CsSection Grid.Row="3"
+                              Title="{i18n:Tr settings.resilience.title}"
+                              Description="{i18n:Tr settings.resilience.description}"
+                              IsVisible="{Binding IsRouteSettingsVisible}">
+                    <Grid RowDefinitions="Auto,Auto"
+                          ColumnDefinitions="*,160"
+                          ColumnSpacing="12"
+                          RowSpacing="12">
+                        <ui:CsSwitch Content="{i18n:Tr settings.resilience.enabled}"
+                                     IsChecked="{Binding CircuitBreakerEnabled}"/>
+                        <ui:CsField Grid.Column="1" Label="{i18n:Tr settings.resilience.failureThreshold}">
+                            <ui:CsInput Text="{Binding CircuitBreakerFailureThreshold}"/>
+                        </ui:CsField>
+                        <ui:CsField Grid.Row="1"
+                                    Grid.ColumnSpan="2"
+                                    Label="{i18n:Tr settings.resilience.recoveryDelays}">
+                            <ui:CsInput Text="{Binding CircuitBreakerRecoveryDelaySeconds}"
+                                        PlaceholderText="5,15,30,60,120"/>
+                        </ui:CsField>
+                    </Grid>
                 </ui:CsSection>
 
                 <ui:CsSection Title="{i18n:Tr settings.auth.title}"

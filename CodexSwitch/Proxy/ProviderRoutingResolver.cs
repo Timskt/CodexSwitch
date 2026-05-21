@@ -22,7 +22,7 @@ public static class ProviderRoutingResolver
         if (ProviderSupports(activeProvider, [requestModel]))
             return new ProviderRouteSelection(activeProvider, ResolveModel(activeProvider, requestModel));
 
-        foreach (var provider in config.Providers)
+        foreach (var provider in config.Providers.Where(provider => provider.Enabled))
         {
             if (string.Equals(provider.Id, activeProvider.Id, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -38,7 +38,7 @@ public static class ProviderRoutingResolver
     {
         var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var provider in config.Providers)
+        foreach (var provider in config.Providers.Where(provider => provider.Enabled))
         {
             foreach (var modelId in EnumeratePublicModelIds(provider))
             {
@@ -73,7 +73,7 @@ public static class ProviderRoutingResolver
             return [];
 
         return config.Providers
-            .Where(provider => ProviderSupports(provider, candidates))
+            .Where(provider => provider.Enabled && ProviderSupports(provider, candidates))
             .Select(provider => provider.Id)
             .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -90,9 +90,16 @@ public static class ProviderRoutingResolver
             ? string.IsNullOrWhiteSpace(config.ActiveCodexProviderId) ? config.ActiveProviderId : config.ActiveCodexProviderId
             : config.ActiveClaudeCodeProviderId;
 
-        return config.Providers.FirstOrDefault(provider =>
+        var activeProvider = config.Providers.FirstOrDefault(provider =>
             ProviderSupportsClient(provider, kind) &&
             string.Equals(provider.Id, activeProviderId, StringComparison.OrdinalIgnoreCase));
+        if (activeProvider is { Enabled: true })
+            return activeProvider;
+
+        return config.Providers.FirstOrDefault(provider =>
+                provider.Enabled &&
+                ProviderSupportsClient(provider, kind)) ??
+            activeProvider;
     }
 
     public static ModelRouteConfig? ResolveModel(ProviderConfig provider, string? requestModel)

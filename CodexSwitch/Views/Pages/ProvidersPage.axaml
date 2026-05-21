@@ -140,6 +140,11 @@
                                         <ui:CodexBadge Variant="Outline" Padding="7,2">
                                             <TextBlock Text="{Binding DefaultModel}" FontSize="11" TextTrimming="CharacterEllipsis"/>
                                         </ui:CodexBadge>
+                                        <ui:CodexBadge Variant="Warning"
+                                                       Padding="7,2"
+                                                       IsVisible="{Binding IsDisabled}">
+                                            <TextBlock Text="{i18n:Tr providers.disabled}" FontSize="11"/>
+                                        </ui:CodexBadge>
                                     </StackPanel>
                                 </ui:CodexProviderCard.Meta>
                                 <ui:CodexProviderCard.Status>

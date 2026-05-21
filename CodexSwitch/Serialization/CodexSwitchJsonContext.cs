@@ -12,6 +12,7 @@ namespace CodexSwitch.Serialization;
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(AppConfig))]
 [JsonSerializable(typeof(NetworkSettings))]
+[JsonSerializable(typeof(ResilienceSettings))]
 [JsonSerializable(typeof(ModelPricingCatalog))]
 [JsonSerializable(typeof(ProviderConfig))]
 [JsonSerializable(typeof(ModelRouteConfig))]

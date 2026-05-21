@@ -6,14 +6,15 @@ public interface IProviderProtocolAdapter
 {
     ProviderProtocol Protocol { get; }
 
-    Task HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken);
+    Task<ProviderAdapterResult> HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken);
 
-    Task HandleMessagesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
+    async Task<ProviderAdapterResult> HandleMessagesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
     {
-        return ProtocolAdapterCommon.WriteJsonErrorAsync(
+        await ProtocolAdapterCommon.WriteJsonErrorAsync(
             context.HttpContext,
             StatusCodes.Status501NotImplemented,
             $"Provider protocol {Protocol} does not support /v1/messages yet.",
             cancellationToken);
+        return ProviderAdapterResult.NonRetryableFailure(StatusCodes.Status501NotImplemented);
     }
 }

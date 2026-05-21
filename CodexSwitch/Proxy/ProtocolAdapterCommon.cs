@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text;
 using CodexSwitch.Models;
 using CodexSwitch.Services;
@@ -7,7 +8,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace CodexSwitch.Proxy;
 
-internal static class ProtocolAdapterCommon
+public static class ProtocolAdapterCommon
 {
     public const int DefaultAnthropicMaxTokens = 4096;
     public const string OutputActivityItemKey = "__CodexSwitch.OutputActivity";
@@ -82,6 +83,26 @@ internal static class ProtocolAdapterCommon
         CancellationToken cancellationToken)
     {
         await WriteJsonErrorAsync(context, (HttpStatusCode)statusCode, message, cancellationToken);
+    }
+
+    public static bool IsTransientStatusCode(HttpStatusCode statusCode)
+    {
+        var code = (int)statusCode;
+        return statusCode is HttpStatusCode.RequestTimeout or
+            HttpStatusCode.TooManyRequests ||
+            code >= StatusCodes.Status500InternalServerError;
+    }
+
+    public static bool IsTransientException(Exception exception, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+            return false;
+
+        return exception is HttpRequestException or
+            IOException or
+            SocketException or
+            TaskCanceledException or
+            TimeoutException;
     }
 
     public static async Task WriteSseEventAsync(

@@ -22,7 +22,7 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
 
     public ProviderProtocol Protocol => ProviderProtocol.OpenAiResponses;
 
-    public async Task HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
+    public async Task<ProviderAdapterResult> HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -51,29 +51,36 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
             }
             context.ProviderAuthService.UpdateActiveAccountQuotaFromHeaders(context.Provider, upstreamResponse.Headers);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
         {
             stopwatch.Stop();
             var record = CreateRecord(context, requestModel, isStream, 502, stopwatch.ElapsedMilliseconds, default, null, ex.Message);
             Record(context, record);
-            await WriteJsonErrorAsync(context.HttpContext, HttpStatusCode.BadGateway, ex.Message, cancellationToken);
-            return;
+            return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
         }
 
         using (upstreamResponse)
         {
-            context.HttpContext.Response.StatusCode = (int)upstreamResponse.StatusCode;
-            CopyContentHeaders(upstreamResponse, context.HttpContext.Response);
-
             if (isStream && upstreamResponse.IsSuccessStatusCode)
             {
-                await ProxyStreamingResponseAsync(
-                    context,
-                    upstreamResponse,
-                    requestModel,
-                    stopwatch,
-                    cancellationToken);
-                return;
+                context.HttpContext.Response.StatusCode = (int)upstreamResponse.StatusCode;
+                CopyContentHeaders(upstreamResponse, context.HttpContext.Response);
+                try
+                {
+                    await ProxyStreamingResponseAsync(
+                        context,
+                        upstreamResponse,
+                        requestModel,
+                        stopwatch,
+                        cancellationToken);
+                    return ProviderAdapterResult.Success();
+                }
+                catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
+                {
+                    return context.HttpContext.Response.HasStarted
+                        ? ProviderAdapterResult.ResponseAlreadyStartedFailure(StatusCodes.Status502BadGateway, ex.Message)
+                        : ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
+                }
             }
 
             var responseBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -94,14 +101,26 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
                 upstreamResponse.IsSuccessStatusCode ? null : responseBody);
             Record(context, record);
 
+            if (!upstreamResponse.IsSuccessStatusCode &&
+                ProtocolAdapterCommon.IsTransientStatusCode(upstreamResponse.StatusCode))
+            {
+                return ProviderAdapterResult.RetryableFailureBeforeResponseStarted((int)upstreamResponse.StatusCode, responseBody);
+            }
+
+            context.HttpContext.Response.StatusCode = (int)upstreamResponse.StatusCode;
+            CopyContentHeaders(upstreamResponse, context.HttpContext.Response);
+
             if (string.IsNullOrWhiteSpace(context.HttpContext.Response.ContentType))
                 context.HttpContext.Response.ContentType = "application/json";
 
             await context.HttpContext.Response.WriteAsync(responseBody, cancellationToken);
+            return upstreamResponse.IsSuccessStatusCode
+                ? ProviderAdapterResult.Success()
+                : ProviderAdapterResult.NonRetryableFailure((int)upstreamResponse.StatusCode, responseBody);
         }
     }
 
-    public async Task HandleMessagesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
+    public async Task<ProviderAdapterResult> HandleMessagesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var root = context.RequestRoot;
@@ -127,7 +146,7 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
                 ex.Message);
             Record(context, record);
             await WriteJsonErrorAsync(context.HttpContext, HttpStatusCode.BadRequest, ex.Message, cancellationToken);
-            return;
+            return ProviderAdapterResult.NonRetryableFailure(StatusCodes.Status400BadRequest, ex.Message);
         }
 
         using var upstreamRequest = CreateUpstreamRequest(context, payload);
@@ -151,7 +170,7 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
             }
             context.ProviderAuthService.UpdateActiveAccountQuotaFromHeaders(context.Provider, upstreamResponse.Headers);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
         {
             stopwatch.Stop();
             var record = CreateRecord(
@@ -164,8 +183,7 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
                 null,
                 ex.Message);
             Record(context, record);
-            await WriteJsonErrorAsync(context.HttpContext, HttpStatusCode.BadGateway, ex.Message, cancellationToken);
-            return;
+            return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
         }
 
         using (upstreamResponse)
@@ -174,8 +192,17 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
             {
                 context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
                 context.HttpContext.Response.ContentType = "text/event-stream";
-                await ProxyMessagesResponsesStreamAsync(context, upstreamResponse, requestModel, stopwatch, cancellationToken);
-                return;
+                try
+                {
+                    await ProxyMessagesResponsesStreamAsync(context, upstreamResponse, requestModel, stopwatch, cancellationToken);
+                    return ProviderAdapterResult.Success();
+                }
+                catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
+                {
+                    return context.HttpContext.Response.HasStarted
+                        ? ProviderAdapterResult.ResponseAlreadyStartedFailure(StatusCodes.Status502BadGateway, ex.Message)
+                        : ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
+                }
             }
 
             var responseBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -194,12 +221,15 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
                     responseBody);
                 Record(context, errorRecord);
 
+                if (ProtocolAdapterCommon.IsTransientStatusCode(upstreamResponse.StatusCode))
+                    return ProviderAdapterResult.RetryableFailureBeforeResponseStarted((int)upstreamResponse.StatusCode, responseBody);
+
                 context.HttpContext.Response.StatusCode = (int)upstreamResponse.StatusCode;
                 CopyContentHeaders(upstreamResponse, context.HttpContext.Response);
                 if (string.IsNullOrWhiteSpace(context.HttpContext.Response.ContentType))
                     context.HttpContext.Response.ContentType = "application/json";
                 await context.HttpContext.Response.WriteAsync(responseBody, cancellationToken);
-                return;
+                return ProviderAdapterResult.NonRetryableFailure((int)upstreamResponse.StatusCode, responseBody);
             }
 
             BuiltMessagesPayload builtResponse;
@@ -226,7 +256,7 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
                     HttpStatusCode.BadGateway,
                     "OpenAI Responses upstream returned invalid JSON.",
                     cancellationToken);
-                return;
+                return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
             }
 
             stopwatch.Stop();
@@ -244,6 +274,7 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
             context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
             context.HttpContext.Response.ContentType = "application/json";
             await context.HttpContext.Response.WriteAsync(builtResponse.Json, cancellationToken);
+            return ProviderAdapterResult.Success();
         }
     }
 

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added a Codex sessions page that inspects session metadata by provider, shows session/index distribution, and migrates historical sessions to the CodexSwitch-managed provider.
+- Added provider enable/disable controls so disabled channels stay visible in the UI but are skipped by request routing.
+- Added upstream resilience settings for circuit breaker thresholds, recovery probe delays, outbound HTTP version, and connection timeout.
 - Added Responses WebSocket proxy support for providers that expose the OpenAI Responses websocket flow.
 - Added Claude bootstrap config handling so the installer and startup path can seed `.claude` settings automatically.
 - Added bundled macOS app icon and dock integration for the refreshed desktop shell.
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Reworked Codex and Claude config writers to preserve user-authored settings, keep originals as same-name `.bak` backups, and restore from those backups on exit.
+- Reworked proxy forwarding to fail over across enabled providers on transient upstream failures while preserving non-retryable authentication and request errors.
 - Refreshed icon resolution and caching to prefer bundled Codex, Claude, and Xiaomi assets with theme-aware defaults.
 - Updated the desktop shell, provider dialogs, home/models/providers/settings pages, and localized copy for the new UI pass.
 - Updated release packaging to ship the app icon on macOS and trigger Claude bootstrap during installation.

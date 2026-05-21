@@ -7,9 +7,10 @@ public static class AppHttpClientFactory
 {
     public static HttpClient Create(NetworkSettings? settings)
     {
+        settings ??= new NetworkSettings();
         return new HttpClient(CreateHandler(settings))
         {
-            DefaultRequestVersion = HttpVersion.Version20,
+            DefaultRequestVersion = ResolveRequestVersion(settings.OutboundHttpVersion),
             DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
             Timeout = Timeout.InfiniteTimeSpan
         };
@@ -31,7 +32,17 @@ public static class AppHttpClientFactory
             KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
             KeepAlivePingDelay = TimeSpan.FromSeconds(30),
             KeepAlivePingTimeout = TimeSpan.FromSeconds(15),
-            ConnectTimeout = TimeSpan.FromSeconds(20)
+            ConnectTimeout = TimeSpan.FromSeconds(settings.ConnectTimeoutSeconds <= 0 ? 30 : settings.ConnectTimeoutSeconds)
+        };
+    }
+
+    private static Version ResolveRequestVersion(OutboundHttpVersion version)
+    {
+        return version switch
+        {
+            OutboundHttpVersion.Http1 => HttpVersion.Version11,
+            OutboundHttpVersion.Http3 => HttpVersion.Version30,
+            _ => HttpVersion.Version20
         };
     }
 

@@ -20,7 +20,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
 
     public ProviderProtocol Protocol => ProviderProtocol.OpenAiChat;
 
-    public async Task HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
+    public async Task<ProviderAdapterResult> HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
     {
         if (!ResponsesRequestContextParser.TryParse(context, requireLocalHistory: true, out var requestData, out var requestError))
         {
@@ -29,7 +29,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                 HttpStatusCode.BadRequest,
                 requestError ?? "Invalid Responses request.",
                 cancellationToken);
-            return;
+            return ProviderAdapterResult.NonRetryableFailure(StatusCodes.Status400BadRequest, requestError);
         }
 
         var stopwatch = Stopwatch.StartNew();
@@ -61,7 +61,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                 HttpStatusCode.BadRequest,
                 ex.Message,
                 cancellationToken);
-            return;
+            return ProviderAdapterResult.NonRetryableFailure(StatusCodes.Status400BadRequest, ex.Message);
         }
 
         using var upstreamRequest = CreateUpstreamRequest(context, payload);
@@ -84,7 +84,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                     cancellationToken);
             }
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
         {
             stopwatch.Stop();
             var record = ProtocolAdapterCommon.CreateRecord(
@@ -97,12 +97,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                 null,
                 ex.Message);
             ProtocolAdapterCommon.Record(context, record);
-            await ProtocolAdapterCommon.WriteJsonErrorAsync(
-                context.HttpContext,
-                HttpStatusCode.BadGateway,
-                ex.Message,
-                cancellationToken);
-            return;
+            return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
         }
 
         using (upstreamResponse)
@@ -111,15 +106,24 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
             {
                 context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
                 context.HttpContext.Response.ContentType = "text/event-stream";
-                await ProxyStreamingResponseAsync(
-                    context,
-                    requestData,
-                    upstreamResponse,
-                    requestModel,
-                    stopwatch,
-                    upstreamMessages,
-                    cancellationToken);
-                return;
+                try
+                {
+                    await ProxyStreamingResponseAsync(
+                        context,
+                        requestData,
+                        upstreamResponse,
+                        requestModel,
+                        stopwatch,
+                        upstreamMessages,
+                        cancellationToken);
+                    return ProviderAdapterResult.Success();
+                }
+                catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
+                {
+                    return context.HttpContext.Response.HasStarted
+                        ? ProviderAdapterResult.ResponseAlreadyStartedFailure(StatusCodes.Status502BadGateway, ex.Message)
+                        : ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
+                }
             }
 
             var responseBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -138,12 +142,15 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                     responseBody);
                 ProtocolAdapterCommon.Record(context, errorRecord);
 
+                if (ProtocolAdapterCommon.IsTransientStatusCode(upstreamResponse.StatusCode))
+                    return ProviderAdapterResult.RetryableFailureBeforeResponseStarted((int)upstreamResponse.StatusCode, responseBody);
+
                 context.HttpContext.Response.StatusCode = (int)upstreamResponse.StatusCode;
                 ProtocolAdapterCommon.CopyContentHeaders(upstreamResponse, context.HttpContext.Response);
                 if (string.IsNullOrWhiteSpace(context.HttpContext.Response.ContentType))
                     context.HttpContext.Response.ContentType = "application/json";
                 await context.HttpContext.Response.WriteAsync(responseBody, cancellationToken);
-                return;
+                return ProviderAdapterResult.NonRetryableFailure((int)upstreamResponse.StatusCode, responseBody);
             }
 
             BuiltResponsesPayload builtResponse;
@@ -170,7 +177,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                     HttpStatusCode.BadGateway,
                     "OpenAI Chat upstream returned invalid JSON.",
                     cancellationToken);
-                return;
+                return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
             }
 
             stopwatch.Stop();
@@ -195,10 +202,11 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
             context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
             context.HttpContext.Response.ContentType = "application/json";
             await context.HttpContext.Response.WriteAsync(builtResponse.Json, cancellationToken);
+            return ProviderAdapterResult.Success();
         }
     }
 
-    public async Task HandleMessagesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
+    public async Task<ProviderAdapterResult> HandleMessagesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var root = context.RequestRoot;
@@ -228,7 +236,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                 HttpStatusCode.BadRequest,
                 ex.Message,
                 cancellationToken);
-            return;
+            return ProviderAdapterResult.NonRetryableFailure(StatusCodes.Status400BadRequest, ex.Message);
         }
 
         using var upstreamRequest = CreateUpstreamRequest(context, payload);
@@ -251,7 +259,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                     cancellationToken);
             }
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
         {
             stopwatch.Stop();
             var record = ProtocolAdapterCommon.CreateRecord(
@@ -264,12 +272,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                 null,
                 ex.Message);
             ProtocolAdapterCommon.Record(context, record);
-            await ProtocolAdapterCommon.WriteJsonErrorAsync(
-                context.HttpContext,
-                HttpStatusCode.BadGateway,
-                ex.Message,
-                cancellationToken);
-            return;
+            return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
         }
 
         using (upstreamResponse)
@@ -278,13 +281,22 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
             {
                 context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
                 context.HttpContext.Response.ContentType = "text/event-stream";
-                await ProxyMessagesChatStreamAsync(
-                    context,
-                    upstreamResponse,
-                    requestModel,
-                    stopwatch,
-                    cancellationToken);
-                return;
+                try
+                {
+                    await ProxyMessagesChatStreamAsync(
+                        context,
+                        upstreamResponse,
+                        requestModel,
+                        stopwatch,
+                        cancellationToken);
+                    return ProviderAdapterResult.Success();
+                }
+                catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
+                {
+                    return context.HttpContext.Response.HasStarted
+                        ? ProviderAdapterResult.ResponseAlreadyStartedFailure(StatusCodes.Status502BadGateway, ex.Message)
+                        : ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
+                }
             }
 
             var responseBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -303,12 +315,15 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                     responseBody);
                 ProtocolAdapterCommon.Record(context, errorRecord);
 
+                if (ProtocolAdapterCommon.IsTransientStatusCode(upstreamResponse.StatusCode))
+                    return ProviderAdapterResult.RetryableFailureBeforeResponseStarted((int)upstreamResponse.StatusCode, responseBody);
+
                 context.HttpContext.Response.StatusCode = (int)upstreamResponse.StatusCode;
                 ProtocolAdapterCommon.CopyContentHeaders(upstreamResponse, context.HttpContext.Response);
                 if (string.IsNullOrWhiteSpace(context.HttpContext.Response.ContentType))
                     context.HttpContext.Response.ContentType = "application/json";
                 await context.HttpContext.Response.WriteAsync(responseBody, cancellationToken);
-                return;
+                return ProviderAdapterResult.NonRetryableFailure((int)upstreamResponse.StatusCode, responseBody);
             }
 
             BuiltMessagesPayload builtResponse;
@@ -335,7 +350,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                     HttpStatusCode.BadGateway,
                     "OpenAI Chat upstream returned invalid JSON.",
                     cancellationToken);
-                return;
+                return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
             }
 
             stopwatch.Stop();
@@ -353,6 +368,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
             context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
             context.HttpContext.Response.ContentType = "application/json";
             await context.HttpContext.Response.WriteAsync(builtResponse.Json, cancellationToken);
+            return ProviderAdapterResult.Success();
         }
     }
 

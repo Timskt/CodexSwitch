@@ -195,6 +195,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private bool _selectedSupportsWebSockets;
 
     [ObservableProperty]
+    private bool _selectedProviderEnabled = true;
+
+    [ObservableProperty]
     private bool _selectedCodexOneMillionContextEnabled;
 
     [ObservableProperty]
@@ -337,6 +340,21 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     [ObservableProperty]
     private bool _networkProxyBypassOnLocal = true;
+
+    [ObservableProperty]
+    private OutboundHttpVersion _networkHttpVersion = OutboundHttpVersion.Http2;
+
+    [ObservableProperty]
+    private int _networkConnectTimeoutSeconds = 30;
+
+    [ObservableProperty]
+    private bool _circuitBreakerEnabled = true;
+
+    [ObservableProperty]
+    private int _circuitBreakerFailureThreshold = 3;
+
+    [ObservableProperty]
+    private string _circuitBreakerRecoveryDelaySeconds = "5,15,30,60,120";
 
     [ObservableProperty]
     private bool _preserveCodexAppAuth;
@@ -573,6 +591,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         MiniStatusQuotaCards = [];
         CodexSessionProviderRows = [];
         ProtocolOptions = Enum.GetValues<ProviderProtocol>();
+        HttpVersionOptions = Enum.GetValues<OutboundHttpVersion>();
         UsageQueryMethods = ["GET", "POST"];
 
         SelectClientAppCommand = new RelayCommand<ClientAppItem>(SelectClientApp);
@@ -708,6 +727,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<CodexSessionProviderItem> CodexSessionProviderRows { get; }
 
     public ProviderProtocol[] ProtocolOptions { get; }
+
+    public OutboundHttpVersion[] HttpVersionOptions { get; }
 
     public string[] UsageQueryMethods { get; }
 
@@ -1258,7 +1279,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var networkChanged =
             _config.Network.ProxyMode != NetworkProxyMode ||
             !string.Equals(_config.Network.CustomProxyUrl?.Trim() ?? "", networkProxyUrl, StringComparison.Ordinal) ||
-            _config.Network.BypassProxyOnLocal != NetworkProxyBypassOnLocal;
+            _config.Network.BypassProxyOnLocal != NetworkProxyBypassOnLocal ||
+            _config.Network.OutboundHttpVersion != NetworkHttpVersion ||
+            _config.Network.ConnectTimeoutSeconds != NormalizeConnectTimeoutSeconds(NetworkConnectTimeoutSeconds);
 
         _config.Proxy.Host = string.IsNullOrWhiteSpace(ProxyListenHost) ? "127.0.0.1" : ProxyListenHost.Trim();
         _config.Proxy.Port = ProxyPort <= 0 ? 12785 : ProxyPort;
@@ -1269,6 +1292,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _config.Network.ProxyMode = NetworkProxyMode;
         _config.Network.CustomProxyUrl = networkProxyUrl;
         _config.Network.BypassProxyOnLocal = NetworkProxyBypassOnLocal;
+        _config.Network.OutboundHttpVersion = NetworkHttpVersion;
+        _config.Network.ConnectTimeoutSeconds = NormalizeConnectTimeoutSeconds(NetworkConnectTimeoutSeconds);
+        _config.Resilience.CircuitBreakerEnabled = CircuitBreakerEnabled;
+        _config.Resilience.CircuitBreakerFailureThreshold = CircuitBreakerFailureThreshold <= 0 ? 3 : CircuitBreakerFailureThreshold;
+        ApplyCircuitBreakerRecoveryDelays(_config.Resilience, CircuitBreakerRecoveryDelaySeconds);
         _config.Ui.Language = string.IsNullOrWhiteSpace(UiLanguage) ? _i18n.DefaultLanguageCode : UiLanguage.Trim();
         _config.Ui.Theme = AppThemeService.Normalize(UiTheme);
         UiTheme = _config.Ui.Theme;
@@ -1294,6 +1322,39 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         else
             await StopProxyAsync();
         StatusMessage = startupStatusMessage ?? successMessage;
+    }
+
+    private static int NormalizeConnectTimeoutSeconds(int value)
+    {
+        return value <= 0 ? 30 : value;
+    }
+
+    private static void ApplyCircuitBreakerRecoveryDelays(ResilienceSettings settings, string value)
+    {
+        var delays = value
+            .Split([',', ';', ' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => int.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out var delay) ? delay : 0)
+            .Where(delay => delay > 0)
+            .Take(5)
+            .ToArray();
+        if (delays.Length == 0)
+            delays = [5, 15, 30, 60, 120];
+
+        settings.CircuitBreakerRecoveryDelaySeconds.Clear();
+        foreach (var delay in delays)
+            settings.CircuitBreakerRecoveryDelaySeconds.Add(delay);
+    }
+
+    private static string FormatCircuitBreakerRecoveryDelays(ResilienceSettings settings)
+    {
+        var delays = settings.CircuitBreakerRecoveryDelaySeconds
+            .Where(delay => delay > 0)
+            .Take(5)
+            .ToArray();
+        if (delays.Length == 0)
+            delays = [5, 15, 30, 60, 120];
+
+        return string.Join(",", delays);
     }
 
     private void SyncStartupRegistrationFromConfig()
@@ -1404,6 +1465,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
 
         SelectProvider(row);
+        if (!row.IsEnabled)
+        {
+            StatusMessage = T("status.providerDisabled");
+            return;
+        }
+
         if (row.ClientApp == ClientAppKind.ClaudeCode)
             _config.ActiveClaudeCodeProviderId = row.Id;
         else
@@ -1596,6 +1663,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         provider.DisplayName = string.IsNullOrWhiteSpace(SelectedProviderName) ? provider.Id : SelectedProviderName.Trim();
         provider.Note = string.IsNullOrWhiteSpace(SelectedProviderNote) ? null : SelectedProviderNote.Trim();
         provider.Website = string.IsNullOrWhiteSpace(SelectedProviderWebsite) ? null : SelectedProviderWebsite.Trim();
+        provider.Enabled = SelectedProviderEnabled;
         provider.BaseUrl = SelectedBaseUrl.Trim();
         provider.ApiKey = provider.AuthMode == ProviderAuthMode.OAuth ? "" : SelectedApiKey.Trim();
         provider.DefaultModel = SelectedDefaultModel.Trim();
@@ -1676,6 +1744,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 _config.ActiveClaudeCodeProviderId = provider.Id;
         }
 
+        var wasActiveProvider =
+            string.Equals(_config.ActiveCodexProviderId, provider.Id, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(_config.ActiveClaudeCodeProviderId, provider.Id, StringComparison.OrdinalIgnoreCase);
         _store.SaveConfig(_config);
         RefreshProviderRows();
         SelectProvider(SelectedProviderRows.FirstOrDefault(row => row.Id == provider.Id) ??
@@ -1688,7 +1759,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             : null;
         await RefreshProviderUsageQueryAsync(provider.Id, usageAccountId);
         if (_config.Proxy.Enabled &&
-            (string.Equals(_config.ActiveCodexProviderId, provider.Id, StringComparison.OrdinalIgnoreCase) ||
+            (wasActiveProvider ||
+             string.Equals(_config.ActiveCodexProviderId, provider.Id, StringComparison.OrdinalIgnoreCase) ||
              string.Equals(_config.ActiveClaudeCodeProviderId, provider.Id, StringComparison.OrdinalIgnoreCase)))
         {
             await ReloadProxyConfigAsync();
@@ -1703,6 +1775,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             SelectedProviderName = provider.DisplayName;
             SelectedProviderNote = provider.Note ?? "";
             SelectedProviderWebsite = provider.Website ?? "";
+            SelectedProviderEnabled = provider.Enabled;
             SelectedBaseUrl = provider.BaseUrl;
             SelectedApiKey = provider.AuthMode == ProviderAuthMode.OAuth ? "" : provider.ApiKey;
             SelectedDefaultModel = provider.DefaultModel;
@@ -2315,9 +2388,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _config.Providers.Remove(provider);
         RemoveProviderUsageState(provider.Id);
         if (wasCodexActive)
-            _config.ActiveCodexProviderId = _config.Providers.FirstOrDefault(item => item.SupportsCodex)?.Id ?? "";
+            _config.ActiveCodexProviderId = _config.Providers.FirstOrDefault(item => item.Enabled && item.SupportsCodex)?.Id ??
+                _config.Providers.FirstOrDefault(item => item.SupportsCodex)?.Id ?? "";
         if (wasClaudeActive)
-            _config.ActiveClaudeCodeProviderId = _config.Providers.FirstOrDefault(item => item.SupportsClaudeCode)?.Id ?? "";
+            _config.ActiveClaudeCodeProviderId = _config.Providers.FirstOrDefault(item => item.Enabled && item.SupportsClaudeCode)?.Id ??
+                _config.Providers.FirstOrDefault(item => item.SupportsClaudeCode)?.Id ?? "";
         _config.ActiveProviderId = _config.ActiveCodexProviderId;
 
         _providerPendingDeleteId = null;
@@ -2685,6 +2760,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             DisplayName = string.IsNullOrWhiteSpace(provider.DisplayName) ? provider.Id : provider.DisplayName,
             BaseUrl = provider.BaseUrl,
             IconPath = _iconCacheService.GetIconPath(iconSlug),
+            IsEnabled = provider.Enabled,
             Protocol = provider.Protocol.ToString(),
             DefaultModel = kind == ClientAppKind.ClaudeCode ? provider.ClaudeCode.Model : provider.DefaultModel,
             AuthMode = provider.AuthMode == ProviderAuthMode.OAuth ? "OAuth" : T("providers.apiKey"),
@@ -3176,6 +3252,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             NetworkProxyMode = _config.Network.ProxyMode;
             NetworkProxyUrl = _config.Network.CustomProxyUrl;
             NetworkProxyBypassOnLocal = _config.Network.BypassProxyOnLocal;
+            NetworkHttpVersion = _config.Network.OutboundHttpVersion;
+            NetworkConnectTimeoutSeconds = NormalizeConnectTimeoutSeconds(_config.Network.ConnectTimeoutSeconds);
+            CircuitBreakerEnabled = _config.Resilience.CircuitBreakerEnabled;
+            CircuitBreakerFailureThreshold = _config.Resilience.CircuitBreakerFailureThreshold <= 0
+                ? 3
+                : _config.Resilience.CircuitBreakerFailureThreshold;
+            CircuitBreakerRecoveryDelaySeconds = FormatCircuitBreakerRecoveryDelays(_config.Resilience);
             PreserveCodexAppAuth = _config.Proxy.PreserveCodexAppAuth;
             UseFakeCodexAppAuth = _config.Proxy.UseFakeCodexAppAuth;
             Endpoint = _config.Proxy.Endpoint;
@@ -4841,6 +4924,10 @@ public sealed partial class ProviderListItem : ObservableObject
     public string BaseUrl { get; set; } = "";
 
     public string IconPath { get; set; } = "";
+
+    public bool IsEnabled { get; set; } = true;
+
+    public bool IsDisabled => !IsEnabled;
 
     public string Protocol { get; set; } = "";
 

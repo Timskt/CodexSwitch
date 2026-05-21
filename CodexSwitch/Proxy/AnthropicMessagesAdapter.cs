@@ -20,7 +20,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
 
     public ProviderProtocol Protocol => ProviderProtocol.AnthropicMessages;
 
-    public async Task HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
+    public async Task<ProviderAdapterResult> HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
     {
         if (!ResponsesRequestContextParser.TryParse(context, requireLocalHistory: true, out var requestData, out var requestError))
         {
@@ -29,7 +29,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                 HttpStatusCode.BadRequest,
                 requestError ?? "Invalid Responses request.",
                 cancellationToken);
-            return;
+            return ProviderAdapterResult.NonRetryableFailure(StatusCodes.Status400BadRequest, requestError);
         }
 
         var stopwatch = Stopwatch.StartNew();
@@ -61,7 +61,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                 HttpStatusCode.BadRequest,
                 ex.Message,
                 cancellationToken);
-            return;
+            return ProviderAdapterResult.NonRetryableFailure(StatusCodes.Status400BadRequest, ex.Message);
         }
 
         using var upstreamRequest = CreateUpstreamRequest(context.Provider, payload);
@@ -74,7 +74,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                 isStream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
                 cancellationToken);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
         {
             stopwatch.Stop();
             var record = ProtocolAdapterCommon.CreateRecord(
@@ -87,12 +87,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                 null,
                 ex.Message);
             ProtocolAdapterCommon.Record(context, record);
-            await ProtocolAdapterCommon.WriteJsonErrorAsync(
-                context.HttpContext,
-                HttpStatusCode.BadGateway,
-                ex.Message,
-                cancellationToken);
-            return;
+            return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
         }
 
         using (upstreamResponse)
@@ -101,15 +96,24 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
             {
                 context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
                 context.HttpContext.Response.ContentType = "text/event-stream";
-                await ProxyStreamingResponseAsync(
-                    context,
-                    requestData,
-                    requestPlan,
-                    upstreamResponse,
-                    requestModel,
-                    stopwatch,
-                    cancellationToken);
-                return;
+                try
+                {
+                    await ProxyStreamingResponseAsync(
+                        context,
+                        requestData,
+                        requestPlan,
+                        upstreamResponse,
+                        requestModel,
+                        stopwatch,
+                        cancellationToken);
+                    return ProviderAdapterResult.Success();
+                }
+                catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
+                {
+                    return context.HttpContext.Response.HasStarted
+                        ? ProviderAdapterResult.ResponseAlreadyStartedFailure(StatusCodes.Status502BadGateway, ex.Message)
+                        : ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
+                }
             }
 
             var responseBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -128,12 +132,15 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                     responseBody);
                 ProtocolAdapterCommon.Record(context, errorRecord);
 
+                if (ProtocolAdapterCommon.IsTransientStatusCode(upstreamResponse.StatusCode))
+                    return ProviderAdapterResult.RetryableFailureBeforeResponseStarted((int)upstreamResponse.StatusCode, responseBody);
+
                 context.HttpContext.Response.StatusCode = (int)upstreamResponse.StatusCode;
                 ProtocolAdapterCommon.CopyContentHeaders(upstreamResponse, context.HttpContext.Response);
                 if (string.IsNullOrWhiteSpace(context.HttpContext.Response.ContentType))
                     context.HttpContext.Response.ContentType = "application/json";
                 await context.HttpContext.Response.WriteAsync(responseBody, cancellationToken);
-                return;
+                return ProviderAdapterResult.NonRetryableFailure((int)upstreamResponse.StatusCode, responseBody);
             }
 
             BuiltResponsesPayload builtResponse;
@@ -160,7 +167,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                     HttpStatusCode.BadGateway,
                     "Anthropic Messages upstream returned invalid JSON.",
                     cancellationToken);
-                return;
+                return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
             }
 
             stopwatch.Stop();
@@ -186,10 +193,11 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
             context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
             context.HttpContext.Response.ContentType = "application/json";
             await context.HttpContext.Response.WriteAsync(builtResponse.Json, cancellationToken);
+            return ProviderAdapterResult.Success();
         }
     }
 
-    public async Task HandleMessagesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
+    public async Task<ProviderAdapterResult> HandleMessagesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var root = context.RequestRoot;
@@ -210,7 +218,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                 isStream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
                 cancellationToken);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
         {
             stopwatch.Stop();
             var record = ProtocolAdapterCommon.CreateRecord(
@@ -223,12 +231,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                 null,
                 ex.Message);
             ProtocolAdapterCommon.Record(context, record);
-            await ProtocolAdapterCommon.WriteJsonErrorAsync(
-                context.HttpContext,
-                HttpStatusCode.BadGateway,
-                ex.Message,
-                cancellationToken);
-            return;
+            return ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
         }
 
         using (upstreamResponse)
@@ -239,13 +242,22 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                 ProtocolAdapterCommon.CopyContentHeaders(upstreamResponse, context.HttpContext.Response);
                 context.HttpContext.Response.ContentType = upstreamResponse.Content.Headers.ContentType?.ToString() ??
                     "text/event-stream";
-                await ProxyDirectMessagesStreamAsync(
-                    context,
-                    upstreamResponse,
-                    requestModel,
-                    stopwatch,
-                    cancellationToken);
-                return;
+                try
+                {
+                    await ProxyDirectMessagesStreamAsync(
+                        context,
+                        upstreamResponse,
+                        requestModel,
+                        stopwatch,
+                        cancellationToken);
+                    return ProviderAdapterResult.Success();
+                }
+                catch (Exception ex) when (ProtocolAdapterCommon.IsTransientException(ex, cancellationToken))
+                {
+                    return context.HttpContext.Response.HasStarted
+                        ? ProviderAdapterResult.ResponseAlreadyStartedFailure(StatusCodes.Status502BadGateway, ex.Message)
+                        : ProviderAdapterResult.RetryableFailureBeforeResponseStarted(StatusCodes.Status502BadGateway, ex.Message);
+                }
             }
 
             var responseBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -276,11 +288,20 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                 upstreamResponse.IsSuccessStatusCode ? null : responseBody);
             ProtocolAdapterCommon.Record(context, record);
 
+            if (!upstreamResponse.IsSuccessStatusCode &&
+                ProtocolAdapterCommon.IsTransientStatusCode(upstreamResponse.StatusCode))
+            {
+                return ProviderAdapterResult.RetryableFailureBeforeResponseStarted((int)upstreamResponse.StatusCode, responseBody);
+            }
+
             context.HttpContext.Response.StatusCode = (int)upstreamResponse.StatusCode;
             ProtocolAdapterCommon.CopyContentHeaders(upstreamResponse, context.HttpContext.Response);
             if (string.IsNullOrWhiteSpace(context.HttpContext.Response.ContentType))
                 context.HttpContext.Response.ContentType = "application/json";
             await context.HttpContext.Response.WriteAsync(responseBody, cancellationToken);
+            return upstreamResponse.IsSuccessStatusCode
+                ? ProviderAdapterResult.Success()
+                : ProviderAdapterResult.NonRetryableFailure((int)upstreamResponse.StatusCode, responseBody);
         }
     }
 

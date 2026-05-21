@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using CodexSwitch.Models;
@@ -158,6 +159,32 @@ public sealed class UiV2InfrastructureTests : IDisposable
         Assert.Equal(OutboundProxyMode.System, config.Network.ProxyMode);
         Assert.Equal("", config.Network.CustomProxyUrl);
         Assert.True(config.Network.BypassProxyOnLocal);
+        Assert.Equal(OutboundHttpVersion.Http2, config.Network.OutboundHttpVersion);
+        Assert.Equal(30, config.Network.ConnectTimeoutSeconds);
+        Assert.True(config.Resilience.CircuitBreakerEnabled);
+        Assert.Equal(3, config.Resilience.CircuitBreakerFailureThreshold);
+        Assert.Equal([5, 15, 30, 60, 120], config.Resilience.CircuitBreakerRecoveryDelaySeconds);
+    }
+
+    [Fact]
+    public void EnsureValidDefaults_SkipsDisabledActiveProvider_WhenEnabledFallbackExists()
+    {
+        var config = new AppConfig
+        {
+            ActiveProviderId = "disabled",
+            ActiveCodexProviderId = "disabled",
+            Providers =
+            {
+                new ProviderConfig { Id = "disabled", Enabled = false, SupportsCodex = true },
+                new ProviderConfig { Id = "enabled", Enabled = true, SupportsCodex = true }
+            }
+        };
+
+        ConfigurationStore.EnsureValidDefaults(config);
+
+        Assert.False(config.Providers[0].Enabled);
+        Assert.Equal("enabled", config.ActiveCodexProviderId);
+        Assert.Equal("enabled", config.ActiveProviderId);
     }
 
     [Fact]
@@ -176,6 +203,31 @@ public sealed class UiV2InfrastructureTests : IDisposable
         Assert.Equal(Timeout.InfiniteTimeSpan, handler.PooledConnectionLifetime);
         Assert.True(handler.EnableMultipleHttp2Connections);
         Assert.Equal(HttpKeepAlivePingPolicy.Always, handler.KeepAlivePingPolicy);
+        Assert.Equal(TimeSpan.FromSeconds(30), handler.ConnectTimeout);
+    }
+
+    [Fact]
+    public void AppHttpClientFactory_AppliesConfiguredHttpVersionsAndConnectTimeout()
+    {
+        using var h1 = AppHttpClientFactory.Create(new NetworkSettings
+        {
+            OutboundHttpVersion = OutboundHttpVersion.Http1,
+            ConnectTimeoutSeconds = 12
+        });
+        using var h3 = AppHttpClientFactory.Create(new NetworkSettings
+        {
+            OutboundHttpVersion = OutboundHttpVersion.Http3
+        });
+        using var h1Handler = AppHttpClientFactory.CreateHandler(new NetworkSettings
+        {
+            ConnectTimeoutSeconds = 12
+        });
+
+        Assert.Equal(HttpVersion.Version11, h1.DefaultRequestVersion);
+        Assert.Equal(HttpVersionPolicy.RequestVersionOrLower, h1.DefaultVersionPolicy);
+        Assert.Equal(HttpVersion.Version30, h3.DefaultRequestVersion);
+        Assert.Equal(HttpVersionPolicy.RequestVersionOrLower, h3.DefaultVersionPolicy);
+        Assert.Equal(TimeSpan.FromSeconds(12), h1Handler.ConnectTimeout);
     }
 
     [Fact]
@@ -196,6 +248,60 @@ public sealed class UiV2InfrastructureTests : IDisposable
         Assert.Equal(new Uri("http://127.0.0.1:7890/"), custom.Proxy.GetProxy(new Uri("https://api.openai.com/")));
         Assert.False(disabled.UseProxy);
         Assert.Null(disabled.Proxy);
+    }
+
+    [Fact]
+    public void ProviderCircuitBreakerRegistry_OpensAndProbesWithIncreasingDelays()
+    {
+        var now = DateTimeOffset.Parse("2026-05-21T00:00:00Z", CultureInfo.InvariantCulture);
+        var registry = new ProviderCircuitBreakerRegistry(() => now);
+        var settings = new ResilienceSettings
+        {
+            CircuitBreakerFailureThreshold = 2,
+            CircuitBreakerRecoveryDelaySeconds = [5, 15, 30, 60, 120]
+        };
+
+        Assert.True(registry.Evaluate("upstream", settings).CanAttempt);
+
+        registry.ReportFailure("upstream", settings);
+        Assert.True(registry.Evaluate("upstream", settings).CanAttempt);
+
+        registry.ReportFailure("upstream", settings);
+        var open = registry.Evaluate("upstream", settings);
+        Assert.False(open.CanAttempt);
+        Assert.Equal(ProviderCircuitBreakerState.Open, open.State);
+        Assert.Equal(now + TimeSpan.FromSeconds(5), open.NextAttemptAt);
+
+        now += TimeSpan.FromSeconds(5);
+        var firstProbe = registry.Evaluate("upstream", settings);
+        Assert.True(firstProbe.CanAttempt);
+        Assert.True(firstProbe.IsProbe);
+        Assert.Equal(ProviderCircuitBreakerState.HalfOpen, firstProbe.State);
+
+        registry.ReportFailure("upstream", settings);
+        var secondOpen = registry.Evaluate("upstream", settings);
+        Assert.False(secondOpen.CanAttempt);
+        Assert.Equal(now + TimeSpan.FromSeconds(15), secondOpen.NextAttemptAt);
+
+        now += TimeSpan.FromSeconds(15);
+        Assert.True(registry.Evaluate("upstream", settings).CanAttempt);
+        registry.ReportSuccess("upstream", settings);
+
+        var closed = registry.Evaluate("upstream", settings);
+        Assert.True(closed.CanAttempt);
+        Assert.Equal(ProviderCircuitBreakerState.Closed, closed.State);
+    }
+
+    [Fact]
+    public void ProtocolAdapterCommon_OnlyTreatsTransientStatusCodesAsCircuitFailures()
+    {
+        Assert.False(ProtocolAdapterCommon.IsTransientStatusCode(HttpStatusCode.BadRequest));
+        Assert.False(ProtocolAdapterCommon.IsTransientStatusCode(HttpStatusCode.Unauthorized));
+        Assert.False(ProtocolAdapterCommon.IsTransientStatusCode(HttpStatusCode.Forbidden));
+        Assert.False(ProtocolAdapterCommon.IsTransientStatusCode(HttpStatusCode.NotFound));
+        Assert.True(ProtocolAdapterCommon.IsTransientStatusCode(HttpStatusCode.RequestTimeout));
+        Assert.True(ProtocolAdapterCommon.IsTransientStatusCode(HttpStatusCode.TooManyRequests));
+        Assert.True(ProtocolAdapterCommon.IsTransientStatusCode(HttpStatusCode.InternalServerError));
     }
 
     [Fact]
@@ -395,6 +501,146 @@ public sealed class UiV2InfrastructureTests : IDisposable
         Assert.False(first.Headers.ConnectionClose.GetValueOrDefault());
         Assert.False(second.Headers.ConnectionClose.GetValueOrDefault());
         Assert.Equal(1, connectCount);
+    }
+
+    [Fact]
+    public async Task ProxyHostService_Responses_FailsOverToNextEnabledProviderOnTransientFailure()
+    {
+        var paths = CreatePaths("responses-failover");
+        var config = CreateResponsesProxyConfig(
+            GetAvailablePort(),
+            CreateResponsesProvider("bad", "https://bad.test/v1"),
+            CreateResponsesProvider("good", "https://good.test/v1"));
+        config.ActiveCodexProviderId = "bad";
+        config.ActiveProviderId = "bad";
+        var calledHosts = new List<string>();
+        using var upstreamHttpClient = new HttpClient(new AsyncHandler((request, _) =>
+        {
+            calledHosts.Add(request.RequestUri!.Host);
+            return Task.FromResult(request.RequestUri!.Host == "bad.test"
+                ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                {
+                    Content = new StringContent("""{"error":"temporary"}""", Encoding.UTF8, "application/json")
+                }
+                : CreateOpenAiResponsesSuccess());
+        }));
+        var meter = new UsageMeter(new PriceCalculator(new ModelPricingCatalog()));
+        await using var service = CreateProxyHostService(paths, config, meter, upstreamHttpClient);
+
+        await service.StartAsync(config);
+
+        using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false });
+        using var response = await client.PostAsync(
+            $"http://127.0.0.1:{config.Proxy.Port}/v1/responses",
+            new StringContent("""{"model":"switch-model","input":"ping"}""", Encoding.UTF8, "application/json"));
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(["bad.test", "good.test"], calledHosts);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("\"resp_1\"", body, StringComparison.Ordinal);
+        Assert.Equal(2, meter.Snapshot.Requests);
+        Assert.Equal(1, meter.Snapshot.Errors);
+    }
+
+    [Fact]
+    public async Task ProxyHostService_Responses_SkipsDisabledProviders()
+    {
+        var paths = CreatePaths("responses-disabled-skip");
+        var config = CreateResponsesProxyConfig(
+            GetAvailablePort(),
+            CreateResponsesProvider("bad", "https://bad.test/v1", enabled: false),
+            CreateResponsesProvider("good", "https://good.test/v1"));
+        config.ActiveCodexProviderId = "bad";
+        config.ActiveProviderId = "bad";
+        var calledHosts = new List<string>();
+        using var upstreamHttpClient = new HttpClient(new AsyncHandler((request, _) =>
+        {
+            calledHosts.Add(request.RequestUri!.Host);
+            return Task.FromResult(CreateOpenAiResponsesSuccess());
+        }));
+        await using var service = CreateProxyHostService(
+            paths,
+            config,
+            new UsageMeter(new PriceCalculator(new ModelPricingCatalog())),
+            upstreamHttpClient);
+
+        await service.StartAsync(config);
+
+        using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false });
+        using var response = await client.PostAsync(
+            $"http://127.0.0.1:{config.Proxy.Port}/v1/responses",
+            new StringContent("""{"model":"switch-model","input":"ping"}""", Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(["good.test"], calledHosts);
+    }
+
+    [Fact]
+    public async Task ProxyHostService_Responses_ReturnsUnifiedUnavailableWhenAllCandidatesFail()
+    {
+        var paths = CreatePaths("responses-all-fail");
+        var config = CreateResponsesProxyConfig(
+            GetAvailablePort(),
+            CreateResponsesProvider("first", "https://first.test/v1"),
+            CreateResponsesProvider("second", "https://second.test/v1"));
+        var meter = new UsageMeter(new PriceCalculator(new ModelPricingCatalog()));
+        using var upstreamHttpClient = new HttpClient(new AsyncHandler((_, _) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+            {
+                Content = new StringContent("""{"error":"temporary"}""", Encoding.UTF8, "application/json")
+            })));
+        await using var service = CreateProxyHostService(paths, config, meter, upstreamHttpClient);
+
+        await service.StartAsync(config);
+
+        using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false });
+        using var response = await client.PostAsync(
+            $"http://127.0.0.1:{config.Proxy.Port}/v1/responses",
+            new StringContent("""{"model":"switch-model","input":"ping"}""", Encoding.UTF8, "application/json"));
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("All enabled providers are temporarily unavailable", body, StringComparison.Ordinal);
+        Assert.Equal(2, meter.Snapshot.Requests);
+        Assert.Equal(2, meter.Snapshot.Errors);
+    }
+
+    [Fact]
+    public async Task ProxyHostService_Responses_DoesNotFailOverOnAuthenticationFailure()
+    {
+        var paths = CreatePaths("responses-auth-failure-no-failover");
+        var config = CreateResponsesProxyConfig(
+            GetAvailablePort(),
+            CreateResponsesProvider("bad", "https://bad.test/v1"),
+            CreateResponsesProvider("good", "https://good.test/v1"));
+        config.ActiveCodexProviderId = "bad";
+        config.ActiveProviderId = "bad";
+        var calledHosts = new List<string>();
+        using var upstreamHttpClient = new HttpClient(new AsyncHandler((request, _) =>
+        {
+            calledHosts.Add(request.RequestUri!.Host);
+            return Task.FromResult(request.RequestUri!.Host == "bad.test"
+                ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                {
+                    Content = new StringContent("""{"error":"bad key"}""", Encoding.UTF8, "application/json")
+                }
+                : CreateOpenAiResponsesSuccess());
+        }));
+        await using var service = CreateProxyHostService(
+            paths,
+            config,
+            new UsageMeter(new PriceCalculator(new ModelPricingCatalog())),
+            upstreamHttpClient);
+
+        await service.StartAsync(config);
+
+        using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false });
+        using var response = await client.PostAsync(
+            $"http://127.0.0.1:{config.Proxy.Port}/v1/responses",
+            new StringContent("""{"model":"switch-model","input":"ping"}""", Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(["bad.test"], calledHosts);
     }
 
     [Fact]
@@ -2208,11 +2454,13 @@ public sealed class UiV2InfrastructureTests : IDisposable
         return port;
     }
 
-    private static ProviderConfig CreateResponsesProvider(string id, string baseUrl)
+    private static ProviderConfig CreateResponsesProvider(string id, string baseUrl, bool enabled = true)
     {
         return new ProviderConfig
         {
             Id = id,
+            DisplayName = id,
+            Enabled = enabled,
             SupportsCodex = true,
             BaseUrl = baseUrl,
             ApiKey = id + "-key",
@@ -2239,6 +2487,64 @@ public sealed class UiV2InfrastructureTests : IDisposable
                 Encoding.UTF8,
                 "application/json"));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private static AppConfig CreateResponsesProxyConfig(int port, params ProviderConfig[] providers)
+    {
+        var config = new AppConfig
+        {
+            ActiveCodexProviderId = providers.FirstOrDefault()?.Id ?? "",
+            ActiveProviderId = providers.FirstOrDefault()?.Id ?? "",
+            Proxy =
+            {
+                Enabled = true,
+                Host = "127.0.0.1",
+                Port = port,
+                InboundApiKey = "local-secret"
+            }
+        };
+
+        foreach (var provider in providers)
+            config.Providers.Add(provider);
+
+        return config;
+    }
+
+    private static HttpResponseMessage CreateOpenAiResponsesSuccess()
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """
+                {
+                  "id": "resp_1",
+                  "object": "response",
+                  "model": "switch-upstream",
+                  "output": [],
+                  "usage": { "input_tokens": 1, "output_tokens": 2 }
+                }
+                """,
+                Encoding.UTF8,
+                "application/json")
+        };
+    }
+
+    private static ProxyHostService CreateProxyHostService(
+        AppPaths paths,
+        AppConfig config,
+        UsageMeter meter,
+        HttpClient upstreamHttpClient)
+    {
+        var calculator = new PriceCalculator(new ModelPricingCatalog());
+        var configStore = new ConfigurationStore(paths);
+        return new ProxyHostService(
+            meter,
+            calculator,
+            new UsageLogWriter(paths),
+            new CodexConfigWriter(paths),
+            new ClaudeCodeConfigWriter(paths),
+            new ProviderAuthService(configStore, config, upstreamHttpClient),
+            [new OpenAiResponsesAdapter(upstreamHttpClient)]);
     }
 
     private static Task SendWebSocketTextAsync(WebSocket socket, string message)

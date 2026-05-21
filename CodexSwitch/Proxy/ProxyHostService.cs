@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Globalization;
 using CodexSwitch.Models;
 using CodexSwitch.Serialization;
 using CodexSwitch.Services;
@@ -30,6 +31,7 @@ public sealed class ProxyHostService : IAsyncDisposable
     private readonly ProviderAuthService _providerAuthService;
     private readonly Dictionary<ProviderProtocol, IProviderProtocolAdapter> _adapters;
     private readonly ResponsesConversationStateStore _responseStateStore = new();
+    private readonly ProviderCircuitBreakerRegistry _circuitBreakers = new();
     private WebApplication? _app;
     private AppConfig _config = new();
 
@@ -331,55 +333,18 @@ public sealed class ProxyHostService : IAsyncDisposable
         using (document)
         {
             var requestModel = ResponsesPayloadBuilder.ExtractRequestModel(document.RootElement);
-            var selection = ProviderRoutingResolver.Resolve(_config, requestModel, ClientAppKind.Codex);
-            var provider = selection?.Provider ?? ProviderRoutingResolver.ResolveActiveProvider(_config, ClientAppKind.Codex);
-            if (provider is null)
-            {
-                await WriteJsonErrorAsync(httpContext, StatusCodes.Status503ServiceUnavailable, "No active provider configured.");
-                return;
-            }
-
-            requestModel ??= provider.DefaultModel;
-            var model = selection?.Model ?? ProviderRoutingResolver.ResolveModel(provider, requestModel);
-            var protocol = model?.Protocol ?? provider.Protocol;
-
-            if (!_adapters.TryGetValue(protocol, out var adapter))
-            {
-                await WriteJsonErrorAsync(httpContext, StatusCodes.Status501NotImplemented, $"Provider protocol {protocol} is not supported.");
-                return;
-            }
-
-            var costSettings = ResolveCostSettings(_config, provider, model);
-            var accessToken = await _providerAuthService.ResolveAccessTokenAsync(
-                provider,
-                forceRefresh: false,
-                httpContext.RequestAborted);
-            if (provider.AuthMode == ProviderAuthMode.OAuth && string.IsNullOrWhiteSpace(accessToken))
-            {
-                await WriteJsonErrorAsync(httpContext, StatusCodes.Status401Unauthorized, "Codex OAuth account is not logged in.");
-                return;
-            }
-
-            var context = new ProviderRequestContext(
-                httpContext,
-                _config,
-                ClientAppKind.Codex,
-                provider,
-                model,
-                costSettings,
-                accessToken,
-                _providerAuthService,
-                document,
-                _responseStateStore,
-                _usageMeter,
-                _priceCalculator,
-                _usageLogWriter);
             inputActivity.Dispose();
             using var outputActivity = _usageMeter.BeginOutputActivity();
             httpContext.Items[ProtocolAdapterCommon.OutputActivityItemKey] = outputActivity;
             try
             {
-                await adapter.HandleResponsesAsync(context, httpContext.RequestAborted);
+                await ForwardWithCircuitBreakerAsync(
+                    httpContext,
+                    document,
+                    requestModel,
+                    ClientAppKind.Codex,
+                    "No active provider configured.",
+                    static (adapter, context, cancellationToken) => adapter.HandleResponsesAsync(context, cancellationToken));
             }
             finally
             {
@@ -405,44 +370,84 @@ public sealed class ProxyHostService : IAsyncDisposable
         using (document)
         {
             var requestModel = ExtractRequestModel(document.RootElement);
-            var selection = ProviderRoutingResolver.Resolve(_config, requestModel, ClientAppKind.ClaudeCode);
-            var provider = selection?.Provider ?? ProviderRoutingResolver.ResolveActiveProvider(_config, ClientAppKind.ClaudeCode);
-            if (provider is null)
+            inputActivity.Dispose();
+            using var outputActivity = _usageMeter.BeginOutputActivity();
+            httpContext.Items[ProtocolAdapterCommon.OutputActivityItemKey] = outputActivity;
+            try
             {
-                await WriteJsonErrorAsync(httpContext, StatusCodes.Status503ServiceUnavailable, "No Claude Code provider configured.");
-                return;
+                await ForwardWithCircuitBreakerAsync(
+                    httpContext,
+                    document,
+                    requestModel,
+                    ClientAppKind.ClaudeCode,
+                    "No Claude Code provider configured.",
+                    static (adapter, context, cancellationToken) => adapter.HandleMessagesAsync(context, cancellationToken));
             }
+            finally
+            {
+                httpContext.Items.Remove(ProtocolAdapterCommon.OutputActivityItemKey);
+            }
+        }
+    }
 
-            requestModel ??= provider.ClaudeCode.Model;
-            if (string.IsNullOrWhiteSpace(requestModel))
-                requestModel = provider.DefaultModel;
+    private async Task ForwardWithCircuitBreakerAsync(
+        HttpContext httpContext,
+        JsonDocument document,
+        string? requestModel,
+        ClientAppKind clientApp,
+        string noProviderMessage,
+        Func<IProviderProtocolAdapter, ProviderRequestContext, CancellationToken, Task<ProviderAdapterResult>> invokeAdapter)
+    {
+        var candidates = ResolveRouteCandidates(_config, requestModel, clientApp);
+        if (candidates.Count == 0)
+        {
+            await WriteJsonErrorAsync(httpContext, StatusCodes.Status503ServiceUnavailable, noProviderMessage);
+            return;
+        }
 
-            var model = selection?.Model ?? ProviderRoutingResolver.ResolveModel(provider, requestModel);
+        var attempts = new List<string>();
+        foreach (var selection in candidates)
+        {
+            var provider = selection.Provider;
+            var resolvedRequestModel = ResolveRequestModelForProvider(provider, requestModel, clientApp);
+            var model = selection.Model ?? ProviderRoutingResolver.ResolveModel(provider, resolvedRequestModel);
             var protocol = model?.Protocol ?? provider.Protocol;
+
             if (!_adapters.TryGetValue(protocol, out var adapter))
             {
-                await WriteJsonErrorAsync(httpContext, StatusCodes.Status501NotImplemented, $"Provider protocol {protocol} is not supported.");
-                return;
+                attempts.Add($"{ResolveProviderLabel(provider)}: unsupported protocol {protocol}");
+                continue;
             }
 
-            var costSettings = ResolveCostSettings(_config, provider, model);
+            var circuitAttempt = _circuitBreakers.Evaluate(provider.Id, _config.Resilience);
+            if (!circuitAttempt.CanAttempt)
+            {
+                attempts.Add(FormatCircuitOpenAttempt(provider, circuitAttempt));
+                continue;
+            }
+
             var accessToken = await _providerAuthService.ResolveAccessTokenAsync(
                 provider,
                 forceRefresh: false,
                 httpContext.RequestAborted);
             if (provider.AuthMode == ProviderAuthMode.OAuth && string.IsNullOrWhiteSpace(accessToken))
             {
-                await WriteJsonErrorAsync(httpContext, StatusCodes.Status401Unauthorized, "Provider OAuth account is not logged in.");
+                await WriteJsonErrorAsync(
+                    httpContext,
+                    StatusCodes.Status401Unauthorized,
+                    clientApp == ClientAppKind.Codex
+                        ? "Codex OAuth account is not logged in."
+                        : "Provider OAuth account is not logged in.");
                 return;
             }
 
             var context = new ProviderRequestContext(
                 httpContext,
                 _config,
-                ClientAppKind.ClaudeCode,
+                clientApp,
                 provider,
                 model,
-                costSettings,
+                ResolveCostSettings(_config, provider, model),
                 accessToken,
                 _providerAuthService,
                 document,
@@ -450,18 +455,127 @@ public sealed class ProxyHostService : IAsyncDisposable
                 _usageMeter,
                 _priceCalculator,
                 _usageLogWriter);
-            inputActivity.Dispose();
-            using var outputActivity = _usageMeter.BeginOutputActivity();
-            httpContext.Items[ProtocolAdapterCommon.OutputActivityItemKey] = outputActivity;
-            try
+
+            var result = await invokeAdapter(adapter, context, httpContext.RequestAborted);
+            if (result.Kind == ProviderAdapterResultKind.Success)
             {
-                await adapter.HandleMessagesAsync(context, httpContext.RequestAborted);
+                _circuitBreakers.ReportSuccess(provider.Id, _config.Resilience);
+                return;
             }
-            finally
+
+            if (result.CountsAsCircuitFailure)
+                _circuitBreakers.ReportFailure(provider.Id, _config.Resilience);
+
+            attempts.Add(FormatProviderAttempt(provider, result));
+
+            if (result.Kind == ProviderAdapterResultKind.RetryableFailureBeforeResponseStarted)
+                continue;
+
+            if (result.Kind == ProviderAdapterResultKind.ResponseAlreadyStartedFailure ||
+                result.Kind == ProviderAdapterResultKind.NonRetryableFailure ||
+                httpContext.Response.HasStarted)
             {
-                httpContext.Items.Remove(ProtocolAdapterCommon.OutputActivityItemKey);
+                return;
             }
         }
+
+        await WriteAllProvidersUnavailableAsync(httpContext, attempts);
+    }
+
+    private static IReadOnlyList<ProviderRouteSelection> ResolveRouteCandidates(
+        AppConfig config,
+        string? requestModel,
+        ClientAppKind clientApp)
+    {
+        var candidates = new List<ProviderRouteSelection>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var activeProvider = ProviderRoutingResolver.ResolveActiveProvider(config, clientApp);
+
+        void AddCandidate(ProviderConfig? provider)
+        {
+            if (provider is null ||
+                !provider.Enabled ||
+                !ProviderRoutingResolver.ProviderSupportsClient(provider, clientApp) ||
+                !seen.Add(provider.Id))
+            {
+                return;
+            }
+
+            var resolvedRequestModel = ResolveRequestModelForProvider(provider, requestModel, clientApp);
+            candidates.Add(new ProviderRouteSelection(provider, ProviderRoutingResolver.ResolveModel(provider, resolvedRequestModel)));
+        }
+
+        AddCandidate(activeProvider);
+
+        if (!string.IsNullOrWhiteSpace(requestModel))
+        {
+            foreach (var provider in config.Providers)
+            {
+                if (ProviderRoutingResolver.ProviderSupportsClient(provider, clientApp) &&
+                    provider.Enabled &&
+                    ProviderRoutingResolver.ProviderSupports(provider, [requestModel]))
+                {
+                    AddCandidate(provider);
+                }
+            }
+        }
+
+        if (candidates.Count == 0)
+        {
+            foreach (var provider in config.Providers)
+                AddCandidate(provider);
+        }
+
+        return candidates;
+    }
+
+    private static string ResolveRequestModelForProvider(
+        ProviderConfig provider,
+        string? requestModel,
+        ClientAppKind clientApp)
+    {
+        if (!string.IsNullOrWhiteSpace(requestModel))
+            return requestModel;
+
+        if (clientApp == ClientAppKind.ClaudeCode && !string.IsNullOrWhiteSpace(provider.ClaudeCode.Model))
+            return provider.ClaudeCode.Model;
+
+        return provider.DefaultModel;
+    }
+
+    private static string FormatProviderAttempt(ProviderConfig provider, ProviderAdapterResult result)
+    {
+        var error = string.IsNullOrWhiteSpace(result.Error)
+            ? result.Kind.ToString()
+            : result.Error.Trim();
+        if (error.Length > 160)
+            error = error[..160] + "...";
+
+        return $"{ResolveProviderLabel(provider)}: HTTP {result.StatusCode} {error}";
+    }
+
+    private static string FormatCircuitOpenAttempt(
+        ProviderConfig provider,
+        ProviderCircuitBreakerAttempt attempt)
+    {
+        var next = attempt.NextAttemptAt?.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "later";
+        return $"{ResolveProviderLabel(provider)}: circuit {attempt.State.ToString().ToLowerInvariant()} until {next}";
+    }
+
+    private static string ResolveProviderLabel(ProviderConfig provider)
+    {
+        return string.IsNullOrWhiteSpace(provider.DisplayName) ? provider.Id : provider.DisplayName;
+    }
+
+    private static async Task WriteAllProvidersUnavailableAsync(HttpContext httpContext, IReadOnlyList<string> attempts)
+    {
+        var detail = attempts.Count == 0
+            ? "No enabled provider is available for this request."
+            : string.Join("; ", attempts.Take(5));
+        await WriteJsonErrorAsync(
+            httpContext,
+            StatusCodes.Status503ServiceUnavailable,
+            "All enabled providers are temporarily unavailable. " + detail);
     }
 
     private static Task ApplyLowLatencyClientConnectionAsync(HttpContext httpContext, Func<Task> next)

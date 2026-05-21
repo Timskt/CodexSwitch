@@ -142,6 +142,9 @@
 
                                 <WrapPanel Grid.Row="2"
                                            Grid.ColumnSpan="2">
+                                    <ui:CsSwitch Content="{i18n:Tr providerDialog.enabled}"
+                                                 Margin="0,0,22,8"
+                                                 IsChecked="{Binding SelectedProviderEnabled, Mode=TwoWay}"/>
                                     <ui:CsSwitch Content="{i18n:Tr providerDialog.supportsCodex}"
                                                  Margin="0,0,22,8"
                                                  IsChecked="{Binding SelectedSupportsCodex, Mode=TwoWay}"/>
