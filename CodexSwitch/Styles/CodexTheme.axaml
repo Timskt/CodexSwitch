@@ -83,7 +83,7 @@
     </Styles.Resources>
 
     <Style Selector="Window">
-        <Setter Property="FontFamily" Value="Inter, Segoe UI, Microsoft YaHei UI"/>
+        <Setter Property="FontFamily" Value="{DynamicResource CodexSwitch.FontFamily}"/>
         <Setter Property="Background" Value="{StaticResource CsBackgroundBrush}"/>
     </Style>
 

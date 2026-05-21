@@ -196,6 +196,7 @@
         <Setter Property="MinHeight" Value="36"/>
         <Setter Property="Padding" Value="12,4"/>
         <Setter Property="FontSize" Value="14"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Background" Value="#08FFFFFF"/>
         <Setter Property="Foreground" Value="{StaticResource CsForegroundBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource CsInputBrush}"/>

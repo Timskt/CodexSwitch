@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.1.1] - 2026-05-21
+
+### Added
+
+- Added provider-list default model selection so Codex and Claude Code channels can switch their active model directly from the provider row.
+
+### Changed
+
+- Bundled Alibaba PuHuiTi in the desktop app resources and applied it consistently to the app shell, theme tokens, rolling numbers, and usage trend charts.
+- Tightened compact input vertical alignment for the refreshed provider controls.
+
+### Fixed
+
+- Disposed tracked usage log writers in infrastructure tests before temp-directory cleanup so Windows CI no longer leaves daily usage log files locked.
+
 ## [v0.1.0] - 2026-05-21
 
 ### Added

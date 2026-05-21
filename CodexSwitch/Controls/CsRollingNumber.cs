@@ -237,7 +237,7 @@ public sealed class CsRollingNumber : Control
     {
         return new TextLayout(
             text,
-            new Typeface("Inter", FontStyle.Normal, FontWeight, FontStretch.Normal),
+            new Typeface(AppFonts.DefaultFontFamily, FontStyle.Normal, FontWeight, FontStretch.Normal),
             FontSize,
             Foreground ?? Brushes.White,
             textAlignment: TextAlignment.Left,

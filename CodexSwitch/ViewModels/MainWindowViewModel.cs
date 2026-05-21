@@ -616,6 +616,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         RestartProxyCommand = new AsyncRelayCommand(RestartProxyAsync);
         StopProxyCommand = new AsyncRelayCommand(StopProxyAsync);
         SelectProviderCommand = new RelayCommand<ProviderListItem>(row => _ = ActivateProviderAsync(row));
+        ChangeProviderDefaultModelCommand = new RelayCommand<ProviderDefaultModelChange>(change => _ = ChangeProviderDefaultModelAsync(change));
         SelectClaudeCodeModelCommand = new RelayCommand<string>(SelectClaudeCodeModel);
         SaveClaudeCodeSettingsCommand = new AsyncRelayCommand(SaveClaudeCodeSettingsAsync);
         EditProviderCommand = new RelayCommand<ProviderListItem>(OpenEditProvider);
@@ -779,6 +780,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public IAsyncRelayCommand StopProxyCommand { get; }
 
     public IRelayCommand<ProviderListItem> SelectProviderCommand { get; }
+
+    public IRelayCommand<ProviderDefaultModelChange> ChangeProviderDefaultModelCommand { get; }
 
     public IRelayCommand<string> SelectClaudeCodeModelCommand { get; }
 
@@ -1484,6 +1487,72 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         SelectProvider(FindProviderRow(row.ClientApp, row.Id));
         if (_config.Proxy.Enabled)
             await ReloadProxyConfigAsync();
+    }
+
+    private async Task ChangeProviderDefaultModelAsync(ProviderDefaultModelChange? change)
+    {
+        if (change is null || string.IsNullOrWhiteSpace(change.Model))
+            return;
+
+        var row = change.Provider;
+        var provider = _config.Providers.FirstOrDefault(item =>
+            string.Equals(item.Id, row.Id, StringComparison.OrdinalIgnoreCase));
+        if (provider is null)
+            return;
+
+        var selectedModel = change.Model.Trim();
+        var currentModel = ResolveProviderRowDefaultModel(provider, row.ClientApp);
+        var allowedModels = CreateProviderDefaultModelOptions(provider, currentModel);
+        if (!allowedModels.Contains(selectedModel, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        if (string.Equals(currentModel, selectedModel, StringComparison.Ordinal))
+            return;
+
+        var shouldReloadManagedConfig =
+            IsActiveProviderForClient(provider.Id, row.ClientApp) ||
+            row.ClientApp == ClientAppKind.Codex &&
+            string.IsNullOrWhiteSpace(provider.ClaudeCode.Model) &&
+            IsActiveProviderForClient(provider.Id, ClientAppKind.ClaudeCode);
+        if (row.ClientApp == ClientAppKind.ClaudeCode)
+        {
+            provider.ClaudeCode.Model = selectedModel;
+            provider.ClaudeCode.EnableOneMillionContext =
+                provider.ClaudeCode.EnableOneMillionContext &&
+                ClaudeCodeConfigWriter.IsOneMillionContextModel(selectedModel);
+        }
+        else
+        {
+            provider.DefaultModel = selectedModel;
+        }
+
+        _store.SaveConfig(_config);
+        RefreshProviderRows();
+        SelectProvider(FindProviderRow(row.ClientApp, provider.Id) ??
+            SelectedProviderRows.FirstOrDefault(item => string.Equals(item.Id, provider.Id, StringComparison.OrdinalIgnoreCase)));
+
+        if (_config.Proxy.Enabled && shouldReloadManagedConfig)
+        {
+            await ReloadProxyConfigAsync();
+            if (_proxyHostService.State.Error is null)
+                StatusMessage = T("status.providerDefaultModelSaved");
+        }
+        else
+        {
+            _proxyHostService.UpdateConfig(_config);
+            StatusMessage = T("status.providerDefaultModelSaved");
+        }
+    }
+
+    private bool IsActiveProviderForClient(string providerId, ClientAppKind kind)
+    {
+        var activeId = kind == ClientAppKind.ClaudeCode
+            ? _config.ActiveClaudeCodeProviderId
+            : string.IsNullOrWhiteSpace(_config.ActiveCodexProviderId)
+                ? _config.ActiveProviderId
+                : _config.ActiveCodexProviderId;
+
+        return string.Equals(providerId, activeId, StringComparison.OrdinalIgnoreCase);
     }
 
     private void SelectProvider(ProviderListItem? row)
@@ -2753,6 +2822,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var activeAccount = ResolveUsageAccount(provider, null);
         var usage = CreateProviderUsageDisplay(provider, activeAccount);
         var activeId = kind == ClientAppKind.Codex ? _config.ActiveCodexProviderId : _config.ActiveClaudeCodeProviderId;
+        var defaultModel = ResolveProviderRowDefaultModel(provider, kind);
         var row = new ProviderListItem
         {
             Id = provider.Id,
@@ -2762,7 +2832,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             IconPath = _iconCacheService.GetIconPath(iconSlug),
             IsEnabled = provider.Enabled,
             Protocol = provider.Protocol.ToString(),
-            DefaultModel = kind == ClientAppKind.ClaudeCode ? provider.ClaudeCode.Model : provider.DefaultModel,
+            DefaultModel = defaultModel,
+            DefaultModelOptions = CreateProviderDefaultModelOptions(provider, defaultModel),
             AuthMode = provider.AuthMode == ProviderAuthMode.OAuth ? "OAuth" : T("providers.apiKey"),
             IsOAuth = provider.AuthMode == ProviderAuthMode.OAuth,
             AccountSummary = provider.AuthMode == ProviderAuthMode.OAuth
@@ -2785,6 +2856,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             IsActive = string.Equals(provider.Id, activeId, StringComparison.OrdinalIgnoreCase),
             IsSelected = string.Equals(provider.Id, SelectedProviderId, StringComparison.OrdinalIgnoreCase),
             SelectCommand = SelectProviderCommand,
+            ChangeDefaultModelCommand = ChangeProviderDefaultModelCommand,
             EditCommand = EditProviderCommand,
             DeleteCommand = RequestRemoveProviderCommand
         };
@@ -2815,6 +2887,41 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         return row;
+    }
+
+    private static string ResolveProviderRowDefaultModel(ProviderConfig provider, ClientAppKind kind)
+    {
+        return kind == ClientAppKind.ClaudeCode
+            ? ResolveClaudeCodeModel(provider, provider.ClaudeCode.Model)
+            : provider.DefaultModel;
+    }
+
+    private static ObservableCollection<string> CreateProviderDefaultModelOptions(ProviderConfig provider, string currentModel)
+    {
+        var options = new ObservableCollection<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var model in provider.Models)
+            AddProviderDefaultModelOption(options, seen, model.Id);
+
+        AddProviderDefaultModelOption(options, seen, currentModel);
+        if (options.Count == 0)
+            AddProviderDefaultModelOption(options, seen, provider.DefaultModel);
+
+        return options;
+    }
+
+    private static void AddProviderDefaultModelOption(
+        ObservableCollection<string> options,
+        HashSet<string> seen,
+        string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+            return;
+
+        var normalized = model.Trim();
+        if (seen.Add(normalized))
+            options.Add(normalized);
     }
 
     private ProviderUsageDisplay CreateProviderUsageDisplay(ProviderConfig provider, OAuthAccountConfig? account)
@@ -4899,6 +5006,8 @@ public sealed record UsageLogPageOption(
     bool IsSelected,
     IRelayCommand<int> SelectCommand);
 
+public sealed record ProviderDefaultModelChange(ProviderListItem Provider, string Model);
+
 public sealed partial class ClientAppItem : ObservableObject
 {
     public ClientAppKind Kind { get; init; }
@@ -4931,7 +5040,14 @@ public sealed partial class ProviderListItem : ObservableObject
 
     public string Protocol { get; set; } = "";
 
-    public string DefaultModel { get; set; } = "";
+    [ObservableProperty]
+    private string _defaultModel = "";
+
+    public ObservableCollection<string> DefaultModelOptions { get; set; } = [];
+
+    public bool HasDefaultModelOptions => DefaultModelOptions.Count > 0;
+
+    public bool CanChangeDefaultModel => DefaultModelOptions.Count > 1;
 
     public string ModelsText { get; set; } = "";
 
@@ -4963,6 +5079,8 @@ public sealed partial class ProviderListItem : ObservableObject
 
     public IRelayCommand<ProviderListItem>? SelectCommand { get; init; }
 
+    public IRelayCommand<ProviderDefaultModelChange>? ChangeDefaultModelCommand { get; init; }
+
     public IRelayCommand<ProviderListItem>? EditCommand { get; init; }
 
     public IRelayCommand<ProviderListItem>? DeleteCommand { get; init; }
@@ -4973,6 +5091,14 @@ public sealed partial class ProviderListItem : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
+
+    partial void OnDefaultModelChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        ChangeDefaultModelCommand?.Execute(new ProviderDefaultModelChange(this, value.Trim()));
+    }
 }
 
 public sealed partial class ProviderTemplateItem : ObservableObject

@@ -19,6 +19,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         Path.GetTempPath(),
         "CodexSwitchTests",
         Guid.NewGuid().ToString("N"));
+    private readonly List<UsageLogWriter> _usageLogWriters = [];
 
     [Fact]
     public void EnsureValidDefaults_SelectsFirstProvider_WhenActiveProviderIsMissing()
@@ -364,7 +365,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             new UsageMeter(calculator),
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, httpClient),
@@ -415,7 +416,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             new UsageMeter(calculator),
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, authHttpClient),
@@ -467,7 +468,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             new UsageMeter(calculator),
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, authHttpClient),
@@ -715,7 +716,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             meter,
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, authHttpClient),
@@ -816,7 +817,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             meter,
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, authHttpClient),
@@ -914,7 +915,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             meter,
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, authHttpClient),
@@ -983,7 +984,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             new UsageMeter(calculator),
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, httpClient),
@@ -1048,7 +1049,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             new UsageMeter(calculator),
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, authHttpClient),
@@ -1117,7 +1118,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             meter,
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, authHttpClient),
@@ -1198,7 +1199,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             meter,
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, authHttpClient),
@@ -1284,7 +1285,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         await using var service = new ProxyHostService(
             meter,
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(new ConfigurationStore(paths), config, authHttpClient),
@@ -1387,7 +1388,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
     public void UsageLogReader_AggregatesRequestsCostAndTokens()
     {
         var paths = CreatePaths("usage");
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
         writer.Append(new UsageLogRecord
         {
             Timestamp = new DateTimeOffset(2026, 5, 12, 8, 15, 0, TimeSpan.Zero),
@@ -1450,7 +1451,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
     public void UsageLogReader_OutputTpsDurationUsesOutputRequestsOnly()
     {
         var paths = CreatePaths("usage-output-tps");
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
         var timestamp = new DateTimeOffset(2026, 5, 12, 8, 15, 0, TimeSpan.Zero);
         writer.Append(new UsageLogRecord
         {
@@ -1655,7 +1656,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
     public void UsageLogReader_UsesSelectedRangeAndDailyBuckets()
     {
         var paths = CreatePaths("usage-range");
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
         var now = new DateTimeOffset(2026, 5, 13, 12, 0, 0, TimeSpan.Zero);
         writer.Append(new UsageLogRecord
         {
@@ -1707,7 +1708,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
     {
         var paths = CreatePaths("usage-partitioned-write");
         var timestamp = new DateTimeOffset(2026, 5, 12, 12, 0, 0, TimeSpan.Zero);
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
 
         writer.Append(new UsageLogRecord
         {
@@ -1738,7 +1739,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
     {
         var paths = CreatePaths("usage-buffered-write");
         var timestamp = new DateTimeOffset(2026, 5, 12, 12, 0, 0, TimeSpan.Zero);
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
 
         writer.AppendBuffered(new UsageLogRecord
         {
@@ -1786,7 +1787,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
                 legacyRecord,
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }) + Environment.NewLine);
 
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
         writer.Append(new UsageLogRecord
         {
             Timestamp = now.AddHours(-1),
@@ -1812,7 +1813,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
     public void UsageLogReader_PaginatesRecentRowsWhileKeepingFullTotals()
     {
         var paths = CreatePaths("usage-recent-limit");
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
         var now = new DateTimeOffset(2026, 5, 13, 12, 0, 0, TimeSpan.Zero);
 
         for (var i = 0; i < 100; i++)
@@ -1856,7 +1857,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
     public void UsageLogReader_FiltersBeforeRecentRowLimit()
     {
         var paths = CreatePaths("usage-filter-limit");
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
         var now = new DateTimeOffset(2026, 5, 13, 12, 0, 0, TimeSpan.Zero);
 
         for (var i = 0; i < 80; i++)
@@ -1914,7 +1915,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
     public void UsageLogReader_FiltersByClientAppBeforeTotals()
     {
         var paths = CreatePaths("usage-client-app-filter");
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
         var now = new DateTimeOffset(2026, 5, 13, 12, 0, 0, TimeSpan.Zero);
 
         writer.Append(new UsageLogRecord
@@ -2240,7 +2241,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
             ActiveProviderId = provider.Id,
             Providers = { provider }
         };
-        var writer = new UsageLogWriter(paths);
+        var writer = CreateUsageLogWriter(paths);
         try
         {
             var authService = new ProviderAuthService(new ConfigurationStore(paths), config, new HttpClient());
@@ -2420,6 +2421,9 @@ public sealed class UiV2InfrastructureTests : IDisposable
 
     public void Dispose()
     {
+        foreach (var writer in _usageLogWriters)
+            writer.DisposeAsync().AsTask().GetAwaiter().GetResult();
+
         if (Directory.Exists(_tempDirectory))
             Directory.Delete(_tempDirectory, recursive: true);
     }
@@ -2429,6 +2433,13 @@ public sealed class UiV2InfrastructureTests : IDisposable
         return new AppPaths(
             Path.Combine(_tempDirectory, scenario, "appdata"),
             Path.Combine(_tempDirectory, scenario, "codex"));
+    }
+
+    private UsageLogWriter CreateUsageLogWriter(AppPaths paths)
+    {
+        var writer = new UsageLogWriter(paths);
+        _usageLogWriters.Add(writer);
+        return writer;
     }
 
     private static string WriteCodexSession(AppPaths paths, string relativePath, string modelProvider)
@@ -2529,7 +2540,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         };
     }
 
-    private static ProxyHostService CreateProxyHostService(
+    private ProxyHostService CreateProxyHostService(
         AppPaths paths,
         AppConfig config,
         UsageMeter meter,
@@ -2540,7 +2551,7 @@ public sealed class UiV2InfrastructureTests : IDisposable
         return new ProxyHostService(
             meter,
             calculator,
-            new UsageLogWriter(paths),
+            CreateUsageLogWriter(paths),
             new CodexConfigWriter(paths),
             new ClaudeCodeConfigWriter(paths),
             new ProviderAuthService(configStore, config, upstreamHttpClient),

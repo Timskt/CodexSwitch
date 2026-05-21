@@ -1,4 +1,5 @@
 ﻿using CodexSwitch.Services;
+using Avalonia.Media;
 
 namespace CodexSwitch;
 
@@ -24,9 +25,16 @@ sealed class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            .With(new FontManagerOptions
+            {
+                DefaultFamilyName = AppFonts.DefaultFontFamily,
+                FontFallbacks =
+                [
+                    new FontFallback { FontFamily = new FontFamily(AppFonts.DefaultFontFamily) }
+                ]
+            })
 #if DEBUG
             .WithDeveloperTools()
 #endif
-            .WithInterFont()
             .LogToTrace();
 }

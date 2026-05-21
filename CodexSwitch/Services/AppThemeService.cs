@@ -11,7 +11,7 @@ public static class AppThemeService
     private static readonly CodexSwitchThemeOptions ComponentThemeOptions = CodexSwitchThemeOptions.ShadcnDefault with
     {
         Density = CodexSwitchDensity.Compact,
-        FontFamily = "Inter, Segoe UI, Microsoft YaHei UI"
+        FontFamily = AppFonts.DefaultFontFamily
     };
 
     private static readonly IReadOnlyDictionary<string, ThemeColorPair> ThemeBrushes =
