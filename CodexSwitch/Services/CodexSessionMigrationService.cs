@@ -24,7 +24,11 @@ public sealed class CodexSessionMigrationService
             .GroupBy(file => file.ModelProvider, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
         var indexCounts = TryLoadThreadIndexCounts(out var indexStatus)
-            .ToDictionary(summary => summary.ModelProvider, summary => summary.ThreadIndexCount, StringComparer.OrdinalIgnoreCase);
+            .GroupBy(summary => summary.ModelProvider.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.First().ModelProvider.Trim(),
+                group => group.Sum(summary => summary.ThreadIndexCount),
+                StringComparer.OrdinalIgnoreCase);
         var providerIds = fileCounts.Keys
             .Concat(indexCounts.Keys)
             .Where(provider => !string.IsNullOrWhiteSpace(provider))

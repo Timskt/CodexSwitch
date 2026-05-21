@@ -2096,6 +2096,23 @@ public sealed class UiV2InfrastructureTests : IDisposable
     }
 
     [Fact]
+    public void CodexSessionMigrationService_InspectAggregatesThreadProvidersCaseInsensitively()
+    {
+        var paths = CreatePaths("codex-sessions-index-case-insensitive");
+        var sqlitePath = Path.Combine(paths.CodexDirectory, "state_5.sqlite");
+        Directory.CreateDirectory(paths.CodexDirectory);
+        File.WriteAllText(sqlitePath, "");
+        var sqliteExecutable = WriteFakeSqlite(paths, "OpenAI\t1\nopenai\t1\n");
+
+        var service = new CodexSessionMigrationService(paths, sqliteExecutable);
+        var inspection = service.Inspect();
+
+        var provider = Assert.Single(inspection.Providers);
+        Assert.Equal("openai", provider.ModelProvider, ignoreCase: true);
+        Assert.Equal(2, provider.ThreadIndexCount);
+    }
+
+    [Fact]
     public void CodexSessionMigrationService_MigratesSessionMetadataToManagedProvider()
     {
         var paths = CreatePaths("codex-sessions-migrate");
@@ -2453,6 +2470,26 @@ public sealed class UiV2InfrastructureTests : IDisposable
             "\",\"model_provider\":\"" +
             modelProvider +
             "\"}}\n{\"type\":\"turn_context\"}\n");
+        return path;
+    }
+
+    private static string WriteFakeSqlite(AppPaths paths, string output)
+    {
+        var path = Path.Combine(paths.RootDirectory, OperatingSystem.IsWindows() ? "sqlite3.cmd" : "sqlite3");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        if (OperatingSystem.IsWindows())
+        {
+            var builder = new StringBuilder("@echo off\r\n");
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                builder.Append("echo ").Append(line).Append("\r\n");
+
+            File.WriteAllText(path, builder.ToString());
+            return path;
+        }
+
+        File.WriteAllText(path, "#!/bin/sh\nprintf '" + output.Replace("\\", "\\\\").Replace("'", "'\\''") + "'\n");
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return path;
     }
 
