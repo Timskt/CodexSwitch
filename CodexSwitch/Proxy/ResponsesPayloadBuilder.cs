@@ -6,6 +6,133 @@ namespace CodexSwitch.Proxy;
 public static class ResponsesPayloadBuilder
 {
     public static byte[] Build(
+        ResponsesRequestSnapshot snapshot,
+        ProviderConfig provider,
+        ModelRouteConfig? model,
+        ProviderCostSettings costSettings)
+    {
+        return Build(snapshot, provider, model, costSettings, []);
+    }
+
+    public static byte[] Build(
+        ResponsesRequestSnapshot snapshot,
+        ProviderConfig provider,
+        ModelRouteConfig? model,
+        ProviderCostSettings costSettings,
+        IEnumerable<string> extraOmitKeys)
+    {
+        var overrides = ShouldApplyOverrides(provider) ? provider.RequestOverrides : null;
+        var extraKeys = extraOmitKeys
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToArray();
+
+        if (snapshot.IsObject && CanUseRawPayload(provider, model, costSettings, overrides, extraKeys))
+            return snapshot.BodyBytes;
+
+        var omitKeys = overrides?.OmitBodyKeys
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        foreach (var key in extraKeys)
+            omitKeys.Add(key);
+
+        var upstreamModel = ResolveUpstreamModel(provider, model);
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            var reader = new Utf8JsonReader(snapshot.Body.Span, isFinalBlock: true, state: default);
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                throw new JsonException("Responses request body must be a JSON object.");
+
+            writer.WriteStartObject();
+            var wroteModel = false;
+            var wroteServiceTier = false;
+
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndObject && reader.CurrentDepth == 0)
+                    break;
+
+                if (reader.TokenType != JsonTokenType.PropertyName || reader.CurrentDepth != 1)
+                    continue;
+
+                var propertyName = reader.GetString() ?? "";
+                var isModel = reader.ValueTextEquals("model"u8);
+                var isServiceTier = reader.ValueTextEquals("service_tier"u8);
+                var isStore = reader.ValueTextEquals("store"u8);
+                var isInstructions = reader.ValueTextEquals("instructions"u8);
+
+                ReadValue(ref reader);
+                var valueStart = checked((int)reader.TokenStartIndex);
+
+                if (omitKeys.Contains(propertyName) ||
+                    (isStore && overrides?.ForceStoreFalse == true) ||
+                    (isInstructions && overrides?.Instructions is not null))
+                {
+                    SkipNestedValue(ref reader);
+                    continue;
+                }
+
+                if (isModel)
+                {
+                    wroteModel = true;
+                    SkipNestedValue(ref reader);
+                    if (!string.IsNullOrWhiteSpace(upstreamModel))
+                        writer.WriteString(propertyName, upstreamModel);
+                    else
+                        WriteRawPropertyValue(writer, snapshot, propertyName, valueStart, reader);
+                    continue;
+                }
+
+                if (isServiceTier)
+                {
+                    wroteServiceTier = true;
+                    if (ShouldForceFastTier(costSettings))
+                    {
+                        SkipNestedValue(ref reader);
+                        writer.WriteString(propertyName, ResolveFastTier(provider, model));
+                    }
+                    else if (!string.IsNullOrWhiteSpace(model?.ServiceTier))
+                    {
+                        SkipNestedValue(ref reader);
+                        writer.WriteString(propertyName, model.ServiceTier);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(provider.ServiceTier))
+                    {
+                        SkipNestedValue(ref reader);
+                        writer.WriteString(propertyName, provider.ServiceTier);
+                    }
+                    else
+                    {
+                        SkipNestedValue(ref reader);
+                        WriteRawPropertyValue(writer, snapshot, propertyName, valueStart, reader);
+                    }
+
+                    continue;
+                }
+
+                SkipNestedValue(ref reader);
+                WriteRawPropertyValue(writer, snapshot, propertyName, valueStart, reader);
+            }
+
+            if (!wroteModel && !string.IsNullOrWhiteSpace(upstreamModel))
+                writer.WriteString("model", upstreamModel);
+
+            if (!wroteServiceTier && ShouldForceFastTier(costSettings))
+                writer.WriteString("service_tier", ResolveFastTier(provider, model));
+
+            if (overrides?.ForceStoreFalse == true)
+                writer.WriteBoolean("store", false);
+
+            if (overrides?.Instructions is not null)
+                writer.WriteString("instructions", overrides.Instructions);
+
+            writer.WriteEndObject();
+        }
+
+        return stream.ToArray();
+    }
+
+    public static byte[] Build(
         JsonElement root,
         ProviderConfig provider,
         ModelRouteConfig? model,
@@ -139,6 +266,52 @@ public static class ResponsesPayloadBuilder
     private static bool ShouldForceFastTier(ProviderCostSettings costSettings)
     {
         return costSettings.FastMode;
+    }
+
+    private static bool CanUseRawPayload(
+        ProviderConfig provider,
+        ModelRouteConfig? model,
+        ProviderCostSettings costSettings,
+        ProviderRequestOverrides? overrides,
+        IReadOnlyCollection<string> extraOmitKeys)
+    {
+        if (!string.IsNullOrWhiteSpace(ResolveUpstreamModel(provider, model)) ||
+            ShouldForceFastTier(costSettings) ||
+            !string.IsNullOrWhiteSpace(model?.ServiceTier) ||
+            !string.IsNullOrWhiteSpace(provider.ServiceTier) ||
+            extraOmitKeys.Count > 0)
+        {
+            return false;
+        }
+
+        return overrides is null ||
+            (!overrides.ForceStoreFalse &&
+             overrides.Instructions is null &&
+             overrides.OmitBodyKeys.All(string.IsNullOrWhiteSpace));
+    }
+
+    private static void WriteRawPropertyValue(
+        Utf8JsonWriter writer,
+        ResponsesRequestSnapshot snapshot,
+        string propertyName,
+        int valueStart,
+        Utf8JsonReader reader)
+    {
+        var valueLength = checked((int)reader.BytesConsumed - valueStart);
+        writer.WritePropertyName(propertyName);
+        writer.WriteRawValue(snapshot.Body.Span.Slice(valueStart, valueLength), skipInputValidation: true);
+    }
+
+    private static void ReadValue(ref Utf8JsonReader reader)
+    {
+        if (!reader.Read())
+            throw new JsonException("Invalid Responses request body.");
+    }
+
+    private static void SkipNestedValue(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
+            reader.Skip();
     }
 
     private static string ResolveFastTier(ProviderConfig provider, ModelRouteConfig? model)

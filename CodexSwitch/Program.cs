@@ -33,8 +33,5 @@ sealed class Program
                     new FontFallback { FontFamily = new FontFamily(AppFonts.DefaultFontFamily) }
                 ]
             })
-#if DEBUG
-            .WithDeveloperTools()
-#endif
             .LogToTrace();
 }

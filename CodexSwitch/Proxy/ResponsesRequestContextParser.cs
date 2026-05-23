@@ -24,6 +24,7 @@ internal static class ResponsesRequestContextParser
     public static bool TryParse(
         ProviderRequestContext context,
         bool requireLocalHistory,
+        bool replayLocalHistory,
         out ResponsesRequestContextData requestData,
         out string? error)
     {
@@ -33,7 +34,7 @@ internal static class ResponsesRequestContextParser
         var priorConversationItems = new List<JsonElement>();
         IReadOnlyList<JsonElement>? priorAnthropicMessages = null;
         IReadOnlyList<JsonElement>? priorOpenAiChatMessages = null;
-        if (!string.IsNullOrWhiteSpace(previousResponseId))
+        if (replayLocalHistory && !string.IsNullOrWhiteSpace(previousResponseId))
         {
             if (context.ResponseStateStore.TryGet(previousResponseId, out var state) && state is not null)
             {

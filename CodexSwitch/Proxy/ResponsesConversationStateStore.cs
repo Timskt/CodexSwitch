@@ -4,8 +4,8 @@ namespace CodexSwitch.Proxy;
 
 public sealed class ResponsesConversationStateStore
 {
-    private const int DefaultMaxStates = 512;
-    private static readonly TimeSpan DefaultTimeToLive = TimeSpan.FromHours(6);
+    private const int DefaultMaxStates = 128;
+    private static readonly TimeSpan DefaultTimeToLive = TimeSpan.FromHours(1);
     private const int PruneEveryWrites = 64;
 
     private readonly ConcurrentDictionary<string, StoredResponsesConversationState> _states =
@@ -58,6 +58,11 @@ public sealed class ResponsesConversationStateStore
         var writes = Interlocked.Increment(ref _writes);
         if (_states.Count > _maxStates || writes % PruneEveryWrites == 0)
             Prune(savedAt);
+    }
+
+    public void Clear()
+    {
+        _states.Clear();
     }
 
     private bool IsExpired(StoredResponsesConversationState state, DateTimeOffset now)

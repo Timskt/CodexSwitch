@@ -2,7 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CodexSwitch.ViewModels"
              xmlns:ui="using:CodexSwitchUI.Controls"
-             xmlns:controls="using:CodexSwitch.Controls"
              xmlns:text="using:CodexSwitchUI.Primitives"
              xmlns:echarts="using:CodexSwitchUI.ECharts.Controls"
              xmlns:i18n="using:CodexSwitch.I18n"
@@ -216,21 +215,11 @@
                   ColumnSpacing="16">
                 <ui:CodexSection Title="{i18n:Tr usage.share.models}"
                                  Description="{Binding UsageModelShareCaption}">
-                    <controls:CsUsagePieChart ItemsSource="{Binding ModelUsageShareItems}"
-                                               TotalLabel="{Binding UsageModelShareTotalLabel}"
-                                               TotalValue="{Binding UsageModelShareTotalValue}"
-                                               EmptyText="{i18n:Tr usage.chart.empty}"
-                                               Foreground="{DynamicResource CodexSwitch.ForegroundBrush}"
-                                               MutedForeground="{DynamicResource CodexSwitch.MutedForegroundBrush}"
-                                               TrackBrush="{DynamicResource CodexSwitch.MutedBrush}"
-                                               SliceBorderBrush="{DynamicResource CodexSwitch.CardBrush}"
-                                               CenterFillBrush="{DynamicResource CodexSwitch.CardBrush}"
-                                               TooltipBackground="{DynamicResource CodexSwitch.PopoverBrush}"
-                                               TooltipForeground="{DynamicResource CodexSwitch.PopoverForegroundBrush}"
-                                               TooltipBorderBrush="{DynamicResource CodexSwitch.BorderBrush}"
-                                               FontFamily="{DynamicResource CodexSwitch.FontFamily}"
-                                               FontSize="{DynamicResource CodexSwitch.FontSizeSm}"
-                                               Height="206"/>
+                    <ui:CodexUsagePieChart ItemsSource="{Binding ModelUsageShareItems}"
+                                           TotalLabel="{Binding UsageModelShareTotalLabel}"
+                                           TotalValue="{Binding UsageModelShareTotalValue}"
+                                           EmptyText="{i18n:Tr usage.chart.empty}"
+                                           Height="206"/>
                 </ui:CodexSection>
 
                 <ui:CodexSection Grid.Column="1"

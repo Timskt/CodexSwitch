@@ -97,10 +97,10 @@ internal sealed class ResponsesWebSocketProxy
         string message,
         CancellationToken cancellationToken)
     {
-        JsonDocument document;
+        ResponsesRequestSnapshot snapshot;
         try
         {
-            document = JsonDocument.Parse(message);
+            snapshot = ResponsesRequestSnapshot.Parse(message);
         }
         catch (JsonException)
         {
@@ -115,10 +115,9 @@ internal sealed class ResponsesWebSocketProxy
             return;
         }
 
-        using (document)
+        using (snapshot)
         {
-            var root = document.RootElement;
-            if (!string.Equals(TryGetString(root, "type"), "response.create", StringComparison.Ordinal))
+            if (!string.Equals(snapshot.EventType, "response.create", StringComparison.Ordinal))
             {
                 await SendErrorAsync(
                     clientSocket,
@@ -131,21 +130,20 @@ internal sealed class ResponsesWebSocketProxy
                 return;
             }
 
-            await HandleResponseCreateAsync(httpContext, clientSocket, document, cancellationToken);
+            await HandleResponseCreateAsync(httpContext, clientSocket, snapshot, cancellationToken);
         }
     }
 
     private async Task HandleResponseCreateAsync(
         HttpContext httpContext,
         WebSocket clientSocket,
-        JsonDocument document,
+        ResponsesRequestSnapshot snapshot,
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         using var inputActivity = _usageMeter.BeginInputActivity();
         var config = _getConfig();
-        var root = document.RootElement;
-        var requestedModel = ResponsesPayloadBuilder.ExtractRequestModel(root);
+        var requestedModel = snapshot.RequestModel;
         var selection = ProviderRoutingResolver.Resolve(config, requestedModel, ClientAppKind.Codex);
         var provider = selection?.Provider ?? ProviderRoutingResolver.ResolveActiveProvider(config, ClientAppKind.Codex);
         if (provider is null)
@@ -168,7 +166,7 @@ internal sealed class ResponsesWebSocketProxy
         {
             await SendAndRecordErrorAsync(
                 clientSocket,
-                CreateContext(httpContext, config, provider, model, new ProviderCostSettings(), null, document),
+                CreateContext(httpContext, config, provider, model, new ProviderCostSettings(), null, snapshot),
                 requestModel,
                 stopwatch,
                 StatusCodes.Status501NotImplemented,
@@ -186,7 +184,7 @@ internal sealed class ResponsesWebSocketProxy
         {
             await SendAndRecordErrorAsync(
                 clientSocket,
-                CreateContext(httpContext, config, provider, model, costSettings, accessToken, document),
+                CreateContext(httpContext, config, provider, model, costSettings, accessToken, snapshot),
                 requestModel,
                 stopwatch,
                 StatusCodes.Status401Unauthorized,
@@ -198,8 +196,8 @@ internal sealed class ResponsesWebSocketProxy
             return;
         }
 
-        var context = CreateContext(httpContext, config, provider, model, costSettings, accessToken, document);
-        var payload = ResponsesPayloadBuilder.Build(root, provider, model, costSettings, TransportOmitKeys);
+        var context = CreateContext(httpContext, config, provider, model, costSettings, accessToken, snapshot);
+        var payload = ResponsesPayloadBuilder.Build(snapshot, provider, model, costSettings, TransportOmitKeys);
         inputActivity.Dispose();
 
         using var outputActivity = _usageMeter.BeginOutputActivity();
@@ -221,7 +219,7 @@ internal sealed class ResponsesWebSocketProxy
         ModelRouteConfig? model,
         ProviderCostSettings costSettings,
         string? accessToken,
-        JsonDocument document)
+        ResponsesRequestSnapshot snapshot)
     {
         return new ProviderRequestContext(
             httpContext,
@@ -232,7 +230,7 @@ internal sealed class ResponsesWebSocketProxy
             costSettings,
             accessToken,
             _providerAuthService,
-            document,
+            snapshot,
             _responseStateStore,
             _usageMeter,
             _priceCalculator,
@@ -336,13 +334,15 @@ internal sealed class ResponsesWebSocketProxy
             }
 
             await SendTextAsync(clientSocket, upstreamMessage, cancellationToken);
-            var eventType = TryParseEventType(upstreamMessage);
+            var eventType = ResponsesUsageScanner.TryParseEventType(upstreamMessage, out var parsedEventType)
+                ? parsedEventType
+                : null;
             ProtocolAdapterCommon.ReportOutputActivity(context.HttpContext, eventType, upstreamMessage);
 
             if (!IsTerminalEvent(eventType))
                 continue;
 
-            if (TryParseResponseUsage(upstreamMessage, out var usage, out var model))
+            if (ResponsesUsageScanner.TryParseResponseUsage(upstreamMessage, out var usage, out var model))
             {
                 finalUsage = usage;
                 finalModel = model;
@@ -351,8 +351,8 @@ internal sealed class ResponsesWebSocketProxy
             if (string.Equals(eventType, "response.failed", StringComparison.Ordinal) ||
                 string.Equals(eventType, "error", StringComparison.Ordinal))
             {
-                finalStatus = TryParseErrorStatus(upstreamMessage) ?? StatusCodes.Status502BadGateway;
-                finalError = ExtractErrorMessage(upstreamMessage);
+                finalStatus = ResponsesUsageScanner.TryParseErrorStatus(upstreamMessage) ?? StatusCodes.Status502BadGateway;
+                finalError = ResponsesUsageScanner.ExtractErrorMessage(upstreamMessage);
             }
 
             break;
@@ -413,7 +413,7 @@ internal sealed class ResponsesWebSocketProxy
         if (!string.IsNullOrWhiteSpace(accessToken))
             socket.Options.SetRequestHeader("Authorization", "Bearer " + accessToken);
 
-        foreach (var header in context.ResolveRequestOverrideHeaders())
+        foreach (var header in context.ResolveRequestOverrideHeaders(preferPreviousResponseId: true))
             socket.Options.SetRequestHeader(header.Key, header.Value);
 
         try
@@ -434,7 +434,7 @@ internal sealed class ResponsesWebSocketProxy
             context.Provider.Id,
             BuildWebSocketResponsesUri(context.Provider.BaseUrl).ToString(),
             context.ResolveAuthorizationToken() ?? "",
-            BuildHeaderSignature(context.ResolveRequestOverrideHeaders()));
+            BuildHeaderSignature(context.ResolveRequestOverrideHeaders(preferPreviousResponseId: true)));
     }
 
     private static string BuildHeaderSignature(IReadOnlyDictionary<string, string> headers)
@@ -539,7 +539,9 @@ internal sealed class ResponsesWebSocketProxy
                 break;
         }
 
-        return Encoding.UTF8.GetString(message.ToArray());
+        return message.TryGetBuffer(out var segment) && segment.Array is not null
+            ? Encoding.UTF8.GetString(segment.Array, segment.Offset, segment.Count)
+            : Encoding.UTF8.GetString(message.ToArray());
     }
 
     private static Task SendTextAsync(WebSocket socket, string message, CancellationToken cancellationToken)
@@ -580,69 +582,6 @@ internal sealed class ResponsesWebSocketProxy
         return builder.Uri;
     }
 
-    private static bool TryParseResponseUsage(string message, out UsageTokens usage, out string? model)
-    {
-        usage = default;
-        model = null;
-        try
-        {
-            using var document = JsonDocument.Parse(message);
-            return ResponsesUsageParser.TryParseResponseUsage(document.RootElement, out usage, out model);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    private static string? TryParseEventType(string message)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(message);
-            return TryGetString(document.RootElement, "type");
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static int? TryParseErrorStatus(string message)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(message);
-            var root = document.RootElement;
-            return root.TryGetProperty("status", out var status) &&
-                status.ValueKind == JsonValueKind.Number &&
-                status.TryGetInt32(out var value)
-                ? value
-                : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static string? ExtractErrorMessage(string message)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(message);
-            var root = document.RootElement;
-            if (root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
-                return TryGetString(error, "message") ?? error.GetRawText();
-
-            return TryGetString(root, "message");
-        }
-        catch (JsonException)
-        {
-            return message;
-        }
-    }
-
     private static bool IsTerminalEvent(string? eventType)
     {
         return string.Equals(eventType, "response.completed", StringComparison.Ordinal) ||
@@ -659,13 +598,6 @@ internal sealed class ResponsesWebSocketProxy
             MatchMode = source.MatchMode,
             Multiplier = source.Multiplier
         };
-    }
-
-    private static string? TryGetString(JsonElement element, string propertyName)
-    {
-        return element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
     }
 
     private sealed record UpstreamKey(

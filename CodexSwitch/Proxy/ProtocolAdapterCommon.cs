@@ -138,39 +138,14 @@ public static class ProtocolAdapterCommon
             writeAction(writer);
         }
 
-        return Encoding.UTF8.GetString(stream.ToArray());
+        return stream.TryGetBuffer(out var segment) && segment.Array is not null
+            ? Encoding.UTF8.GetString(segment.Array, segment.Offset, segment.Count)
+            : Encoding.UTF8.GetString(stream.ToArray());
     }
 
     private static int ExtractOutputDeltaCharacterCount(string? eventName, string payload)
     {
-        if (string.IsNullOrWhiteSpace(payload) || string.Equals(payload.Trim(), "[DONE]", StringComparison.Ordinal))
-            return 0;
-
-        try
-        {
-            using var document = JsonDocument.Parse(payload);
-            var root = document.RootElement;
-            var type = GetString(root, "type") ?? eventName ?? "";
-
-            if (IsResponsesTextDelta(type))
-                return GetStringLength(root, "delta");
-
-            if (string.Equals(type, "content_block_delta", StringComparison.Ordinal))
-                return ExtractContentBlockDeltaLength(root);
-
-            var chatDeltaLength = ExtractChatChoicesDeltaLength(root);
-            if (chatDeltaLength > 0)
-                return chatDeltaLength;
-
-            if (!string.IsNullOrWhiteSpace(eventName) && IsResponsesTextDelta(eventName))
-                return GetStringLength(root, "delta");
-
-            return 0;
-        }
-        catch (JsonException)
-        {
-            return 0;
-        }
+        return ResponsesUsageScanner.ExtractOutputDeltaCharacterCount(eventName, payload);
     }
 
     private static int ExtractContentBlockDeltaLength(JsonElement root)

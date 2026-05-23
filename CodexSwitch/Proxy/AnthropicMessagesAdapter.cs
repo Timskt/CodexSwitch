@@ -22,7 +22,12 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
 
     public async Task<ProviderAdapterResult> HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
     {
-        if (!ResponsesRequestContextParser.TryParse(context, requireLocalHistory: true, out var requestData, out var requestError))
+        if (!ResponsesRequestContextParser.TryParse(
+                context,
+                requireLocalHistory: false,
+                replayLocalHistory: false,
+                out var requestData,
+                out var requestError))
         {
             await ProtocolAdapterCommon.WriteJsonErrorAsync(
                 context.HttpContext,
@@ -37,11 +42,10 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
         var isStream = ResponsesPayloadBuilder.ExtractStream(root);
         var requestModel = ResponsesPayloadBuilder.ExtractRequestModel(root) ?? context.Provider.DefaultModel;
 
-        AnthropicRequestPlan requestPlan;
         byte[] payload;
         try
         {
-            (payload, requestPlan) = BuildUpstreamPayload(context, requestData);
+            (payload, _) = BuildUpstreamPayload(context, requestData);
         }
         catch (ProtocolConversionException ex)
         {
@@ -101,7 +105,6 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                     await ProxyStreamingResponseAsync(
                         context,
                         requestData,
-                        requestPlan,
                         upstreamResponse,
                         requestModel,
                         stopwatch,
@@ -147,7 +150,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
             try
             {
                 using var document = JsonDocument.Parse(responseBody);
-                builtResponse = BuildResponsesPayload(context, requestData, requestPlan, document.RootElement);
+                builtResponse = BuildResponsesPayload(context, requestData, document.RootElement);
             }
             catch (JsonException ex)
             {
@@ -181,14 +184,6 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
                 builtResponse.ResponseModel,
                 null);
             ProtocolAdapterCommon.Record(context, record);
-
-            SaveState(
-                context,
-                requestData,
-                builtResponse.ResponseId,
-                builtResponse.OutputItems,
-                builtResponse.AnthropicMessages,
-                requestPlan.System);
 
             context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
             context.HttpContext.Response.ContentType = "application/json";
@@ -1893,7 +1888,6 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
     private static BuiltResponsesPayload BuildResponsesPayload(
         ProviderRequestContext context,
         ResponsesRequestContextData requestData,
-        AnthropicRequestPlan requestPlan,
         JsonElement upstreamRoot)
     {
         var createdAt = ProtocolAdapterCommon.UnixNow();
@@ -1903,8 +1897,6 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
 
         var outputItems = new List<JsonElement>();
         var outputText = new StringBuilder();
-        var anthropicAssistantMessage = CreateAnthropicHistoryAssistantMessage(upstreamRoot);
-
         if (upstreamRoot.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
         {
             var textBlocks = new List<string>();
@@ -1969,33 +1961,7 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
             status,
             incompleteReason);
 
-        var anthropicMessages = new List<JsonElement>(requestPlan.Messages.Count + 1);
-        anthropicMessages.AddRange(requestPlan.Messages.Select(item => item.Clone()));
-        anthropicMessages.Add(anthropicAssistantMessage);
-
-        return new BuiltResponsesPayload(responseId, responseJson, outputItems, usage, model, anthropicMessages);
-    }
-
-    private static JsonElement CreateAnthropicHistoryAssistantMessage(JsonElement upstreamRoot)
-    {
-        var json = ProtocolAdapterCommon.SerializeJson(writer =>
-        {
-            writer.WriteStartObject();
-            writer.WriteString("role", "assistant");
-            writer.WritePropertyName("content");
-            if (upstreamRoot.TryGetProperty("content", out var content))
-                content.WriteTo(writer);
-            else
-            {
-                writer.WriteStartArray();
-                writer.WriteEndArray();
-            }
-
-            writer.WriteEndObject();
-        });
-
-        using var document = JsonDocument.Parse(json);
-        return document.RootElement.Clone();
+        return new BuiltResponsesPayload(responseId, responseJson, outputItems, usage, model);
     }
 
     private static JsonElement CreateResponsesFunctionCallFromAnthropic(JsonElement block)
@@ -2263,7 +2229,6 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
     private static async Task ProxyStreamingResponseAsync(
         ProviderRequestContext context,
         ResponsesRequestContextData requestData,
-        AnthropicRequestPlan requestPlan,
         HttpResponseMessage upstreamResponse,
         string requestModel,
         Stopwatch stopwatch,
@@ -2345,10 +2310,6 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
             null);
         ProtocolAdapterCommon.Record(context, record);
 
-        var anthropicMessages = new List<JsonElement>(requestPlan.Messages.Count + 1);
-        anthropicMessages.AddRange(requestPlan.Messages.Select(item => item.Clone()));
-        anthropicMessages.Add(state.BuildAssistantHistoryMessage());
-        SaveState(context, requestData, state.ResponseId, state.OutputItems, anthropicMessages, requestPlan.System);
     }
 
     private static string BuildCreatedEventJson(ResponsesRequestContextData requestData, AnthropicStreamingState state)
@@ -3013,57 +2974,6 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
         });
     }
 
-    private static void SaveState(
-        ProviderRequestContext context,
-        ResponsesRequestContextData requestData,
-        string responseId,
-        IReadOnlyList<JsonElement> outputItems,
-        IReadOnlyList<JsonElement> anthropicMessages,
-        JsonElement? anthropicSystem)
-    {
-        if (!requestData.Store || string.IsNullOrWhiteSpace(responseId))
-            return;
-
-        var conversation = new List<JsonElement>(requestData.ConversationItems.Count + outputItems.Count);
-        conversation.AddRange(requestData.ConversationItems.Select(item => item.Clone()));
-        conversation.AddRange(outputItems.Select(item => item.Clone()));
-
-        var storedAnthropicMessages = new List<JsonElement>(anthropicMessages.Count + (anthropicSystem.HasValue ? 1 : 0));
-        if (anthropicSystem.HasValue)
-            storedAnthropicMessages.Add(CreateStoredAnthropicSystemMessage(anthropicSystem.Value));
-        storedAnthropicMessages.AddRange(anthropicMessages.Select(item => item.Clone()));
-
-        context.ResponseStateStore.Save(responseId, conversation, storedAnthropicMessages);
-    }
-
-    private static JsonElement CreateStoredAnthropicSystemMessage(JsonElement systemValue)
-    {
-        var json = ProtocolAdapterCommon.SerializeJson(writer =>
-        {
-            writer.WriteStartObject();
-            writer.WriteString("role", "system");
-            writer.WritePropertyName("content");
-            switch (systemValue.ValueKind)
-            {
-                case JsonValueKind.String:
-                case JsonValueKind.Array:
-                    systemValue.WriteTo(writer);
-                    break;
-
-                default:
-                    writer.WriteStartArray();
-                    CreateAnthropicTextBlock(ConvertJsonElementToText(systemValue)).WriteTo(writer);
-                    writer.WriteEndArray();
-                    break;
-            }
-
-            writer.WriteEndObject();
-        });
-
-        using var document = JsonDocument.Parse(json);
-        return document.RootElement.Clone();
-    }
-
     private static HttpRequestMessage CreateUpstreamRequest(ProviderConfig provider, byte[] payload)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, BuildMessagesUri(provider.BaseUrl))
@@ -3540,15 +3450,13 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
             string json,
             IReadOnlyList<JsonElement> outputItems,
             UsageTokens usage,
-            string? responseModel,
-            IReadOnlyList<JsonElement> anthropicMessages)
+            string? responseModel)
         {
             ResponseId = responseId;
             Json = json;
             OutputItems = outputItems;
             Usage = usage;
             ResponseModel = responseModel;
-            AnthropicMessages = anthropicMessages;
         }
 
         public string ResponseId { get; }
@@ -3560,8 +3468,6 @@ public sealed class AnthropicMessagesAdapter : IProviderProtocolAdapter
         public UsageTokens Usage { get; }
 
         public string? ResponseModel { get; }
-
-        public IReadOnlyList<JsonElement> AnthropicMessages { get; }
     }
 
     private enum AnthropicBlockKind

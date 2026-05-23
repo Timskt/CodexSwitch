@@ -144,6 +144,14 @@
                                         <ui:CodexBadge Variant="Secondary" Padding="7,2">
                                             <TextBlock Text="{Binding Protocol}" FontSize="11"/>
                                         </ui:CodexBadge>
+                                        <ui:CodexBadge Variant="Secondary"
+                                                       Padding="7,2"
+                                                       IsVisible="{Binding IsOAuth}">
+                                            <TextBlock Text="{Binding AccountSummary}"
+                                                       FontSize="11"
+                                                       MaxWidth="230"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </ui:CodexBadge>
                                         <ui:CodexSelect Classes="provider-model-select"
                                                         ItemsSource="{Binding DefaultModelOptions}"
                                                         SelectedItem="{Binding DefaultModel, Mode=TwoWay}"

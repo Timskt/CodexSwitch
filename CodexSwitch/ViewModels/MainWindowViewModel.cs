@@ -5,7 +5,6 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CodexSwitch.Controls;
 using CodexSwitch.I18n;
 using CodexSwitch.Models;
 using CodexSwitch.Proxy;
@@ -46,6 +45,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private ProviderAuthService _providerAuthService = null!;
     private ProviderUsageQueryService _providerUsageQueryService = null!;
     private CodexOAuthLoginService _codexOAuthLoginService = null!;
+    private CodexOAuthJsonImportService _codexOAuthJsonImportService = null!;
+    private CodexQuotaProbeService _codexQuotaProbeService = null!;
     private readonly StartupRegistrationService _startupRegistrationService;
     private ProxyHostService _proxyHostService = null!;
     private UpdateCheckService _updateCheckService = null!;
@@ -53,6 +54,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private readonly DispatcherTimer _miniStatusTimer;
     private readonly Dictionary<string, ProviderUsageQueryResult> _providerUsageResults = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _refreshingUsageProviders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _refreshingCodexQuotaAccounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _iconEnsureRequests = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ProviderUsageFailureState> _providerUsageFailures = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object BrushCacheSync = new();
@@ -438,6 +440,18 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private bool _isProviderDialogOpen;
 
     [ObservableProperty]
+    private bool _isCodexAuthImportDialogOpen;
+
+    [ObservableProperty]
+    private bool _isCodexAuthImporting;
+
+    [ObservableProperty]
+    private string _codexAuthImportJson = "";
+
+    [ObservableProperty]
+    private string _codexAuthImportResultText = "";
+
+    [ObservableProperty]
     private bool _isModelDialogOpen;
 
     [ObservableProperty]
@@ -625,12 +639,16 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         SelectUsageQueryTemplateCommand = new RelayCommand<UsageQueryTemplateItem>(SelectUsageQueryTemplate);
         TestProviderUsageQueryCommand = new AsyncRelayCommand(TestProviderUsageQueryAsync);
         LoginCodexOAuthCommand = new AsyncRelayCommand(LoginCodexOAuthAsync);
+        OpenCodexAuthImportDialogCommand = new RelayCommand(OpenCodexAuthImportDialog);
+        CancelCodexAuthImportCommand = new RelayCommand(CancelCodexAuthImport);
+        ImportCodexAuthJsonCommand = new AsyncRelayCommand(ImportCodexAuthJsonAsync);
         RequestRemoveProviderCommand = new RelayCommand<ProviderListItem>(RequestRemoveProvider);
         CancelRemoveProviderCommand = new RelayCommand(() => IsDeleteProviderDialogOpen = false);
         ConfirmRemoveProviderCommand = new AsyncRelayCommand(ConfirmRemoveProviderAsync);
         SelectOAuthAccountCommand = new RelayCommand<OAuthAccountListItem>(SelectOAuthAccount);
         RemoveOAuthAccountCommand = new RelayCommand<OAuthAccountListItem>(RemoveOAuthAccount);
         SaveOAuthAccountNameCommand = new RelayCommand<OAuthAccountListItem>(SaveOAuthAccountName);
+        RefreshOAuthAccountQuotaCommand = new RelayCommand<OAuthAccountListItem>(row => _ = RefreshOAuthAccountQuotaAsync(row));
         CloseProviderDialogCommand = new RelayCommand(() => IsProviderDialogOpen = false);
         SaveProviderCommand = new AsyncRelayCommand(SaveProviderDialogAsync);
         AddProviderModelCommand = new RelayCommand(AddProviderModel);
@@ -709,7 +727,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     public ObservableCollection<CodexRankedBarChartItem> ProviderUsageChartItems { get; }
 
-    public ObservableCollection<UsagePieChartItem> ModelUsageShareItems { get; }
+    public ObservableCollection<CodexUsagePieChartItem> ModelUsageShareItems { get; }
 
     public ObservableCollection<CodexRankedBarChartItem> ModelUsageChartItems { get; }
 
@@ -799,6 +817,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     public IAsyncRelayCommand LoginCodexOAuthCommand { get; }
 
+    public IRelayCommand OpenCodexAuthImportDialogCommand { get; }
+
+    public IRelayCommand CancelCodexAuthImportCommand { get; }
+
+    public IAsyncRelayCommand ImportCodexAuthJsonCommand { get; }
+
     public IRelayCommand<ProviderListItem> RequestRemoveProviderCommand { get; }
 
     public IRelayCommand CancelRemoveProviderCommand { get; }
@@ -810,6 +834,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public IRelayCommand<OAuthAccountListItem> RemoveOAuthAccountCommand { get; }
 
     public IRelayCommand<OAuthAccountListItem> SaveOAuthAccountNameCommand { get; }
+
+    public IRelayCommand<OAuthAccountListItem> RefreshOAuthAccountQuotaCommand { get; }
 
     public IRelayCommand CloseProviderDialogCommand { get; }
 
@@ -872,6 +898,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _providerAuthService = new ProviderAuthService(_store, _config, _sharedHttpClient);
         _providerUsageQueryService = new ProviderUsageQueryService(_sharedHttpClient, _providerAuthService);
         _codexOAuthLoginService = new CodexOAuthLoginService(_sharedHttpClient);
+        _codexOAuthJsonImportService = new CodexOAuthJsonImportService(new CodexOAuthHelper(_sharedHttpClient));
+        _codexQuotaProbeService = new CodexQuotaProbeService(_sharedHttpClient, _providerAuthService);
         _updateCheckService = new UpdateCheckService(_sharedHttpClient);
         _proxyHostService = new ProxyHostService(
             _usageMeter,
@@ -2274,12 +2302,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             _providerUsageResults.Remove(key);
             _refreshingUsageProviders.Remove(key);
             _providerUsageFailures.Remove(key);
+            _refreshingCodexQuotaAccounts.Remove(key);
             return;
         }
 
         var prefix = providerId + "::";
         foreach (var key in _providerUsageResults.Keys
                      .Concat(_refreshingUsageProviders)
+                     .Concat(_refreshingCodexQuotaAccounts)
                      .Concat(_providerUsageFailures.Keys)
                      .Where(key => string.Equals(key, providerId, StringComparison.OrdinalIgnoreCase) ||
                          key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
@@ -2389,7 +2419,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         StatusMessage = T("status.modelConversionRemoved");
     }
 
-    private async Task LoginCodexOAuthAsync()
+    private ProviderConfig GetOrCreateCodexOAuthProvider()
     {
         var provider = _config.Providers.FirstOrDefault(item =>
             string.Equals(item.BuiltinId, ProviderTemplateCatalog.CodexOAuthBuiltinId, StringComparison.OrdinalIgnoreCase));
@@ -2400,6 +2430,18 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 _config.Providers.Select(item => item.Id));
             _config.Providers.Add(provider);
         }
+        else if (provider.OAuth is null)
+        {
+            ProviderTemplateCatalog.ApplyTemplate(provider, ProviderTemplateCatalog.CodexOAuthBuiltinId);
+        }
+
+        provider.SupportsCodex = true;
+        return provider;
+    }
+
+    private async Task LoginCodexOAuthAsync()
+    {
+        var provider = GetOrCreateCodexOAuthProvider();
 
         if (provider.OAuth is null)
         {
@@ -2412,7 +2454,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             var account = await _codexOAuthLoginService.LoginAsync(provider.OAuth, CancellationToken.None);
             _providerAuthService.AddOrUpdateOAuthAccount(provider, account, makeActive: true);
-            provider.SupportsCodex = true;
             _config.ActiveProviderId = provider.Id;
             _config.ActiveCodexProviderId = provider.Id;
             _store.SaveConfig(_config);
@@ -2426,6 +2467,109 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             StatusMessage = F("status.oauthLoginFailed", ex.Message);
+        }
+    }
+
+    private void OpenCodexAuthImportDialog()
+    {
+        CodexAuthImportJson = "";
+        CodexAuthImportResultText = T("codexAuthImport.description");
+        IsCodexAuthImportDialogOpen = true;
+    }
+
+    private void CancelCodexAuthImport()
+    {
+        IsCodexAuthImportDialogOpen = false;
+        IsCodexAuthImporting = false;
+    }
+
+    private async Task ImportCodexAuthJsonAsync()
+    {
+        if (IsCodexAuthImporting)
+            return;
+
+        IsCodexAuthImporting = true;
+        try
+        {
+            var result = _codexOAuthJsonImportService.Import(CodexAuthImportJson);
+            CodexAuthImportResultText = FormatCodexAuthImportResult(result);
+            if (result.Accounts.Count == 0)
+            {
+                StatusMessage = F("status.codexAuthImportFailed", CodexAuthImportResultText);
+                return;
+            }
+
+            var provider = GetOrCreateCodexOAuthProvider();
+            var makeFirstActive = string.IsNullOrWhiteSpace(provider.ActiveAccountId) ||
+                provider.OAuthAccounts.All(account => !account.IsEnabled);
+            var imported = 0;
+            foreach (var account in result.Accounts)
+            {
+                _providerAuthService.AddOrUpdateOAuthAccount(provider, account, makeActive: makeFirstActive && imported == 0);
+                imported++;
+            }
+
+            _config.ActiveProviderId = provider.Id;
+            _config.ActiveCodexProviderId = provider.Id;
+            _store.SaveConfig(_config);
+            RefreshProviderRows();
+            SelectProvider(ProviderRows.FirstOrDefault(row => row.Id == provider.Id));
+            RefreshMiniStatus();
+            StatusMessage = F("status.codexAuthImportSucceeded", imported);
+            IsCodexAuthImportDialogOpen = false;
+            if (_config.Proxy.Enabled)
+                await ReloadProxyConfigAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JsonException)
+        {
+            CodexAuthImportResultText = ex.Message;
+            StatusMessage = F("status.codexAuthImportFailed", ex.Message);
+        }
+        finally
+        {
+            IsCodexAuthImporting = false;
+        }
+    }
+
+    private string FormatCodexAuthImportResult(CodexOAuthJsonImportResult result)
+    {
+        var lines = new List<string>
+        {
+            F("codexAuthImport.result", result.Accounts.Count, result.Skipped.Count)
+        };
+        foreach (var skipped in result.Skipped.Take(3))
+            lines.Add(F("codexAuthImport.skippedRecord", skipped.Index + 1, skipped.Reason));
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private async Task RefreshOAuthAccountQuotaAsync(OAuthAccountListItem? row)
+    {
+        if (row is null)
+            return;
+
+        var provider = _config.Providers.FirstOrDefault(item =>
+            string.Equals(item.Id, row.ProviderId, StringComparison.OrdinalIgnoreCase));
+        if (provider is null)
+            return;
+
+        var key = CreateProviderUsageKey(provider.Id, row.AccountId);
+        if (!_refreshingCodexQuotaAccounts.Add(key))
+            return;
+
+        RefreshProviderRows();
+        try
+        {
+            var result = await _codexQuotaProbeService.ProbeAsync(provider, row.AccountId, CancellationToken.None);
+            RefreshProviderRows();
+            RefreshMiniStatus();
+            StatusMessage = result.Success
+                ? F("status.codexQuotaRefreshed", row.DisplayName)
+                : F("status.codexQuotaRefreshFailed", result.Message);
+        }
+        finally
+        {
+            _refreshingCodexQuotaAccounts.Remove(key);
+            RefreshProviderRows();
         }
     }
 
@@ -2823,6 +2967,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var usage = CreateProviderUsageDisplay(provider, activeAccount);
         var activeId = kind == ClientAppKind.Codex ? _config.ActiveCodexProviderId : _config.ActiveClaudeCodeProviderId;
         var defaultModel = ResolveProviderRowDefaultModel(provider, kind);
+        var activeAccountSummary = provider.AuthMode == ProviderAuthMode.OAuth
+            ? activeAccount is null
+                ? T("providers.notLoggedIn")
+                : F("providers.currentAccount", ProviderAuthService.ResolveAccountDisplayName(activeAccount))
+            : T("providers.apiKey");
+        var activeQuotaSummary = activeAccount is null ? "" : FormatOAuthAccountQuota(activeAccount);
         var row = new ProviderListItem
         {
             Id = provider.Id,
@@ -2836,11 +2986,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             DefaultModelOptions = CreateProviderDefaultModelOptions(provider, defaultModel),
             AuthMode = provider.AuthMode == ProviderAuthMode.OAuth ? "OAuth" : T("providers.apiKey"),
             IsOAuth = provider.AuthMode == ProviderAuthMode.OAuth,
-            AccountSummary = provider.AuthMode == ProviderAuthMode.OAuth
-                ? activeAccount is null
-                    ? T("providers.notLoggedIn")
-                    : F("providers.currentAccount", ProviderAuthService.ResolveAccountDisplayName(activeAccount))
-                : T("providers.apiKey"),
+            AccountSummary = string.IsNullOrWhiteSpace(activeQuotaSummary)
+                ? activeAccountSummary
+                : activeAccountSummary + " | " + activeQuotaSummary,
             ModelsText = provider.Models.Count == 0
                 ? provider.DefaultModel
                 : string.Join(", ", provider.Models.Select(model => $"{model.Id}:{model.Protocol}")),
@@ -2864,6 +3012,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         foreach (var account in provider.OAuthAccounts)
         {
             var accountUsage = CreateProviderUsageDisplay(provider, account);
+            var quotaKey = CreateProviderUsageKey(provider.Id, account.Id);
+            var quotaSummary = FormatOAuthAccountQuota(account);
             row.OAuthAccounts.Add(new OAuthAccountListItem
             {
                 ProviderId = provider.Id,
@@ -2871,7 +3021,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 DisplayName = ProviderAuthService.ResolveAccountDisplayName(account),
                 Email = account.Email ?? "",
                 PlanText = FormatOAuthAccountPlan(account),
-                QuotaSummary = FormatOAuthAccountQuota(account),
+                QuotaSummary = quotaSummary,
+                QuotaToolTip = FormatOAuthAccountQuotaToolTip(account),
+                HasQuotaSummary = !string.IsNullOrWhiteSpace(quotaSummary),
+                IsQuotaRefreshing = _refreshingCodexQuotaAccounts.Contains(quotaKey),
                 UsageSummary = accountUsage.Summary,
                 UsageMeta = accountUsage.Meta,
                 UsageToolTip = accountUsage.ToolTip,
@@ -2882,7 +3035,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 IsActive = string.Equals(account.Id, provider.ActiveAccountId, StringComparison.OrdinalIgnoreCase),
                 SelectCommand = SelectOAuthAccountCommand,
                 RemoveCommand = RemoveOAuthAccountCommand,
-                SaveNameCommand = SaveOAuthAccountNameCommand
+                SaveNameCommand = SaveOAuthAccountNameCommand,
+                RefreshQuotaCommand = RefreshOAuthAccountQuotaCommand
             });
         }
 
@@ -3209,15 +3363,99 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         var parts = new List<string>();
         if (quota.PrimaryUsedPercent is not null)
-            parts.Add(F("providers.oauthQuotaPrimary", quota.PrimaryUsedPercent.Value));
+            parts.Add(FormatCodexQuotaWindow(quota.PrimaryWindowMinutes, quota.PrimaryUsedPercent.Value, primary: true));
         if (quota.SecondaryUsedPercent is not null)
-            parts.Add(F("providers.oauthQuotaSecondary", quota.SecondaryUsedPercent.Value));
+            parts.Add(FormatCodexQuotaWindow(quota.SecondaryWindowMinutes, quota.SecondaryUsedPercent.Value, primary: false));
         if (quota.CreditsUnlimited == true)
             parts.Add(F("providers.oauthQuotaCredits", T("usageQuery.unlimited")));
         else if (quota.HasCredits == true && !string.IsNullOrWhiteSpace(quota.CreditsBalance))
             parts.Add(F("providers.oauthQuotaCredits", quota.CreditsBalance));
 
         return string.Join(" / ", parts);
+    }
+
+    private string FormatOAuthAccountQuotaToolTip(OAuthAccountConfig account)
+    {
+        var quota = account.Quota;
+        if (quota is null)
+            return "";
+
+        var lines = new List<string>();
+        if (quota.PrimaryUsedPercent is not null)
+            lines.Add(FormatCodexQuotaWindowDetail(
+                quota.PrimaryWindowMinutes,
+                quota.PrimaryUsedPercent.Value,
+                quota.PrimaryResetAfterSeconds,
+                quota.PrimaryResetAt,
+                primary: true));
+        if (quota.SecondaryUsedPercent is not null)
+            lines.Add(FormatCodexQuotaWindowDetail(
+                quota.SecondaryWindowMinutes,
+                quota.SecondaryUsedPercent.Value,
+                quota.SecondaryResetAfterSeconds,
+                quota.SecondaryResetAt,
+                primary: false));
+        if (quota.CreditsUnlimited == true)
+            lines.Add(F("providers.oauthQuotaCredits", T("usageQuery.unlimited")));
+        else if (quota.HasCredits == true && !string.IsNullOrWhiteSpace(quota.CreditsBalance))
+            lines.Add(F("providers.oauthQuotaCredits", quota.CreditsBalance));
+        if (quota.LastUpdatedAt != default)
+            lines.Add(T("usageQuery.status.valid") + " " + FormatFullTime(quota.LastUpdatedAt));
+        return string.Join(Environment.NewLine, lines.Where(line => !string.IsNullOrWhiteSpace(line)));
+    }
+
+    private string FormatCodexQuotaWindow(int? windowMinutes, int usedPercent, bool primary)
+    {
+        return FormatCodexQuotaWindowLabel(windowMinutes, primary) + " " +
+            usedPercent.ToString(CultureInfo.InvariantCulture) + "%";
+    }
+
+    private string FormatCodexQuotaWindowDetail(
+        int? windowMinutes,
+        int usedPercent,
+        int? resetAfterSeconds,
+        long? resetAt,
+        bool primary)
+    {
+        var text = FormatCodexQuotaWindow(windowMinutes, usedPercent, primary);
+        var reset = FormatCodexQuotaReset(resetAfterSeconds, resetAt);
+        return string.IsNullOrWhiteSpace(reset) ? text : text + " | " + reset;
+    }
+
+    private string FormatCodexQuotaWindowLabel(int? windowMinutes, bool primary)
+    {
+        return windowMinutes switch
+        {
+            300 => "5h",
+            10080 => "7d",
+            > 0 and < 60 => windowMinutes.Value.ToString(CultureInfo.InvariantCulture) + "m",
+            > 0 when windowMinutes.Value % 1440 == 0 => (windowMinutes.Value / 1440).ToString(CultureInfo.InvariantCulture) + "d",
+            > 0 when windowMinutes.Value % 60 == 0 => (windowMinutes.Value / 60).ToString(CultureInfo.InvariantCulture) + "h",
+            > 0 => windowMinutes.Value.ToString(CultureInfo.InvariantCulture) + "m",
+            _ => primary ? "Primary" : "Secondary"
+        };
+    }
+
+    private static string FormatCodexQuotaReset(int? resetAfterSeconds, long? resetAt)
+    {
+        DateTimeOffset? resetTime = null;
+        try
+        {
+            if (resetAfterSeconds is > 0)
+                resetTime = DateTimeOffset.Now.AddSeconds(resetAfterSeconds.Value);
+            else if (resetAt is > 0)
+                resetTime = resetAt.Value > 10_000_000_000
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(resetAt.Value)
+                    : DateTimeOffset.FromUnixTimeSeconds(resetAt.Value);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return "";
+        }
+
+        return resetTime is null
+            ? ""
+            : "reset " + resetTime.Value.ToLocalTime().ToString("MM/dd HH:mm", CultureInfo.InvariantCulture);
     }
 
     private static MiniStatusQuotaCardItem CreateQuotaCard(string title, UsageQuotaSnapshot quota)
@@ -4163,7 +4401,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             .ToArray();
     }
 
-    private IReadOnlyList<UsagePieChartItem> CreateModelUsageShareItems(
+    private IReadOnlyList<CodexUsagePieChartItem> CreateModelUsageShareItems(
         IEnumerable<ModelUsageSummary> summaries,
         out string totalLabel,
         out string totalValue,
@@ -4193,7 +4431,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         if (total <= 0d)
             return [];
 
-        var items = new List<UsagePieChartItem>();
+        var items = new List<CodexUsagePieChartItem>();
         foreach (var candidate in candidates.Take(UsageBreakdownChartItemLimit))
         {
             items.Add(CreateUsageShareItem(candidate, total, items.Count));
@@ -4216,12 +4454,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         return items;
     }
 
-    private UsagePieChartItem CreateUsageShareItem(
+    private CodexUsagePieChartItem CreateUsageShareItem(
         UsageShareCandidate candidate,
         double total,
         int index)
     {
-        return new UsagePieChartItem(
+        return new CodexUsagePieChartItem(
             candidate.Label,
             candidate.Value,
             DisplayFormatters.FormatPercentage(candidate.Value / total),
@@ -5190,6 +5428,12 @@ public sealed partial class OAuthAccountListItem : ObservableObject
 
     public string QuotaSummary { get; init; } = "";
 
+    public string QuotaToolTip { get; init; } = "";
+
+    public bool HasQuotaSummary { get; init; }
+
+    public bool IsQuotaRefreshing { get; init; }
+
     public string UsageSummary { get; init; } = "";
 
     public string UsageMeta { get; init; } = "";
@@ -5213,6 +5457,8 @@ public sealed partial class OAuthAccountListItem : ObservableObject
     public IRelayCommand<OAuthAccountListItem>? RemoveCommand { get; init; }
 
     public IRelayCommand<OAuthAccountListItem>? SaveNameCommand { get; init; }
+
+    public IRelayCommand<OAuthAccountListItem>? RefreshQuotaCommand { get; init; }
 }
 
 public sealed partial class ModelEditorItem : ObservableObject

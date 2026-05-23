@@ -14,6 +14,7 @@ public sealed class CodexConfigWriter
     [
         "model",
         "model_provider",
+        "service_tier",
         "disable_response_storage",
         "approval_policy",
         "sandbox_mode",
@@ -229,6 +230,7 @@ public sealed class CodexConfigWriter
         {
             ["model"] = FormatTomlString(ManagedModel),
             ["model_provider"] = FormatTomlString(ManagedProviderId),
+            ["service_tier"] = ShouldEnableFastServiceTier(config) ? FormatTomlString("fast") : null,
             ["disable_response_storage"] = "true",
             ["approval_policy"] = FormatTomlString("never"),
             ["sandbox_mode"] = FormatTomlString("danger-full-access"),
@@ -483,6 +485,19 @@ public sealed class CodexConfigWriter
         var provider = ResolveActiveCodexProvider(config);
         return provider?.SupportsWebSockets == true &&
             provider.Protocol == ProviderProtocol.OpenAiResponses;
+    }
+
+    private static bool ShouldEnableFastServiceTier(AppConfig config)
+    {
+        var provider = ResolveActiveCodexProvider(config);
+        if (provider is null)
+            return false;
+
+        var route = provider.Models.FirstOrDefault(model =>
+            string.Equals(model.Id, provider.DefaultModel, StringComparison.OrdinalIgnoreCase));
+        return route?.Cost?.FastMode ??
+            provider.Cost?.FastMode ??
+            config.GlobalCost.FastMode;
     }
 
     private static ProviderConfig? ResolveActiveCodexProvider(AppConfig config)

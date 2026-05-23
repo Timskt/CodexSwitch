@@ -201,27 +201,39 @@ public sealed class ProviderAuthService
         _store.SaveConfig(_config);
     }
 
-    public void UpdateActiveAccountQuotaFromHeaders(ProviderConfig provider, HttpResponseHeaders headers)
+    public bool UpdateActiveAccountQuotaFromHeaders(ProviderConfig provider, HttpResponseHeaders headers)
+    {
+        return UpdateAccountQuotaFromHeaders(provider, null, headers);
+    }
+
+    public bool UpdateAccountQuotaFromHeaders(ProviderConfig provider, string? accountId, HttpResponseHeaders headers)
     {
         if (!IsCodexOAuthProvider(provider))
-            return;
+            return false;
 
-        var account = GetActiveAccount(provider);
+        var account = string.IsNullOrWhiteSpace(accountId)
+            ? GetActiveAccount(provider)
+            : GetAccount(provider, accountId);
         if (account is null)
-            return;
+            return false;
 
         var quota = CreateCodexQuotaFromHeaders(headers);
         if (quota is null)
-            return;
+            return false;
 
+        var planChanged = false;
         if (!string.IsNullOrWhiteSpace(quota.PlanType))
+        {
+            planChanged = !string.Equals(account.PlanType, quota.PlanType, StringComparison.Ordinal);
             account.PlanType = quota.PlanType;
+        }
 
-        if (AreQuotaSnapshotsEqual(account.Quota, quota))
-            return;
+        if (AreQuotaSnapshotsEqual(account.Quota, quota) && !planChanged)
+            return true;
 
         account.Quota = quota;
         _store.SaveConfig(_config);
+        return true;
     }
 
     private static bool NeedsRefresh(OAuthAccountConfig account)

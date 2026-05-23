@@ -59,14 +59,22 @@
                                                    Classes="muted"
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
-                                    <ui:CsButton Grid.Column="1"
-                                                 Classes="outline compact"
-                                                 Command="{Binding LoginCodexOAuthCommand}">
-                                        <StackPanel Orientation="Horizontal" Spacing="7">
-                                            <lucide:LucideIcon Kind="KeyRound" Size="14" StrokeWidth="2"/>
-                                            <TextBlock Text="{i18n:Tr addProvider.codexOAuthLogin}"/>
-                                        </StackPanel>
-                                    </ui:CsButton>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                        <ui:CsButton Classes="outline compact"
+                                                     Command="{Binding OpenCodexAuthImportDialogCommand}">
+                                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                                <lucide:LucideIcon Kind="Upload" Size="14" StrokeWidth="2"/>
+                                                <TextBlock Text="{i18n:Tr addProvider.importCodexAuthJson}"/>
+                                            </StackPanel>
+                                        </ui:CsButton>
+                                        <ui:CsButton Classes="outline compact"
+                                                     Command="{Binding LoginCodexOAuthCommand}">
+                                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                                <lucide:LucideIcon Kind="KeyRound" Size="14" StrokeWidth="2"/>
+                                                <TextBlock Text="{i18n:Tr addProvider.codexOAuthLogin}"/>
+                                            </StackPanel>
+                                        </ui:CsButton>
+                                    </StackPanel>
                                 </Grid>
 
                                 <ItemsControl Grid.Row="1"

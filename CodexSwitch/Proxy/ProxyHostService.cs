@@ -192,6 +192,7 @@ public sealed class ProxyHostService : IAsyncDisposable
         _app = null;
         await app.StopAsync(cancellationToken);
         await app.DisposeAsync();
+        _responseStateStore.Clear();
         if (restoreOriginal)
         {
             _codexConfigWriter.RestoreOriginal();
@@ -319,10 +320,10 @@ public sealed class ProxyHostService : IAsyncDisposable
         // }
 
         using var inputActivity = _usageMeter.BeginInputActivity();
-        JsonDocument document;
+        ResponsesRequestSnapshot snapshot;
         try
         {
-            document = await JsonDocument.ParseAsync(httpContext.Request.Body, cancellationToken: httpContext.RequestAborted);
+            snapshot = await ResponsesRequestSnapshot.ReadAsync(httpContext.Request.Body, httpContext.RequestAborted);
         }
         catch (JsonException)
         {
@@ -330,9 +331,9 @@ public sealed class ProxyHostService : IAsyncDisposable
             return;
         }
 
-        using (document)
+        using (snapshot)
         {
-            var requestModel = ResponsesPayloadBuilder.ExtractRequestModel(document.RootElement);
+            var requestModel = snapshot.RequestModel;
             inputActivity.Dispose();
             using var outputActivity = _usageMeter.BeginOutputActivity();
             httpContext.Items[ProtocolAdapterCommon.OutputActivityItemKey] = outputActivity;
@@ -340,7 +341,7 @@ public sealed class ProxyHostService : IAsyncDisposable
             {
                 await ForwardWithCircuitBreakerAsync(
                     httpContext,
-                    document,
+                    snapshot,
                     requestModel,
                     ClientAppKind.Codex,
                     "No active provider configured.",
@@ -398,6 +399,43 @@ public sealed class ProxyHostService : IAsyncDisposable
         string noProviderMessage,
         Func<IProviderProtocolAdapter, ProviderRequestContext, CancellationToken, Task<ProviderAdapterResult>> invokeAdapter)
     {
+        await ForwardWithCircuitBreakerAsync(
+            httpContext,
+            document,
+            requestSnapshot: null,
+            requestModel,
+            clientApp,
+            noProviderMessage,
+            invokeAdapter);
+    }
+
+    private async Task ForwardWithCircuitBreakerAsync(
+        HttpContext httpContext,
+        ResponsesRequestSnapshot requestSnapshot,
+        string? requestModel,
+        ClientAppKind clientApp,
+        string noProviderMessage,
+        Func<IProviderProtocolAdapter, ProviderRequestContext, CancellationToken, Task<ProviderAdapterResult>> invokeAdapter)
+    {
+        await ForwardWithCircuitBreakerAsync(
+            httpContext,
+            document: null,
+            requestSnapshot,
+            requestModel,
+            clientApp,
+            noProviderMessage,
+            invokeAdapter);
+    }
+
+    private async Task ForwardWithCircuitBreakerAsync(
+        HttpContext httpContext,
+        JsonDocument? document,
+        ResponsesRequestSnapshot? requestSnapshot,
+        string? requestModel,
+        ClientAppKind clientApp,
+        string noProviderMessage,
+        Func<IProviderProtocolAdapter, ProviderRequestContext, CancellationToken, Task<ProviderAdapterResult>> invokeAdapter)
+    {
         var candidates = ResolveRouteCandidates(_config, requestModel, clientApp);
         if (candidates.Count == 0)
         {
@@ -441,20 +479,36 @@ public sealed class ProxyHostService : IAsyncDisposable
                 return;
             }
 
-            var context = new ProviderRequestContext(
-                httpContext,
-                _config,
-                clientApp,
-                provider,
-                model,
-                ResolveCostSettings(_config, provider, model),
-                accessToken,
-                _providerAuthService,
-                document,
-                _responseStateStore,
-                _usageMeter,
-                _priceCalculator,
-                _usageLogWriter);
+            var costSettings = ResolveCostSettings(_config, provider, model);
+            var context = requestSnapshot is not null
+                ? new ProviderRequestContext(
+                    httpContext,
+                    _config,
+                    clientApp,
+                    provider,
+                    model,
+                    costSettings,
+                    accessToken,
+                    _providerAuthService,
+                    requestSnapshot,
+                    _responseStateStore,
+                    _usageMeter,
+                    _priceCalculator,
+                    _usageLogWriter)
+                : new ProviderRequestContext(
+                    httpContext,
+                    _config,
+                    clientApp,
+                    provider,
+                    model,
+                    costSettings,
+                    accessToken,
+                    _providerAuthService,
+                    document ?? throw new InvalidOperationException("A request document is required."),
+                    _responseStateStore,
+                    _usageMeter,
+                    _priceCalculator,
+                    _usageLogWriter);
 
             var result = await invokeAdapter(adapter, context, httpContext.RequestAborted);
             if (result.Kind == ProviderAdapterResultKind.Success)

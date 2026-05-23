@@ -7,18 +7,7 @@ public static class ResponsesUsageParser
 {
     public static bool TryParseResponseUsage(string json, out UsageTokens usage, out string? model)
     {
-        usage = default;
-        model = null;
-
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            return TryParseResponseUsage(document.RootElement, out usage, out model);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        return ResponsesUsageScanner.TryParseResponseUsage(json, out usage, out model);
     }
 
     public static bool TryParseResponseUsage(JsonElement root, out UsageTokens usage, out string? model)
@@ -78,27 +67,7 @@ public static class ResponsesUsageParser
         usage = default;
         model = null;
 
-        if (dataBuilder.Length == 0)
-            return false;
-
-        var data = dataBuilder.ToString().Trim();
-        if (data.Length == 0 || string.Equals(data, "[DONE]", StringComparison.Ordinal))
-            return false;
-
-        try
-        {
-            using var document = JsonDocument.Parse(data);
-            var root = document.RootElement;
-            var type = TryGetString(root, "type");
-            var isCompletedEvent = string.Equals(eventName, "response.completed", StringComparison.Ordinal) ||
-                string.Equals(type, "response.completed", StringComparison.Ordinal);
-
-            return isCompletedEvent && TryParseResponseUsage(root, out usage, out model);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        return ResponsesUsageScanner.TryParseCompletedSse(eventName, dataBuilder, out usage, out model);
     }
 
     private static string? TryGetString(JsonElement element, string propertyName)

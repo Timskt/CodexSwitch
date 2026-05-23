@@ -22,7 +22,12 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
 
     public async Task<ProviderAdapterResult> HandleResponsesAsync(ProviderRequestContext context, CancellationToken cancellationToken)
     {
-        if (!ResponsesRequestContextParser.TryParse(context, requireLocalHistory: true, out var requestData, out var requestError))
+        if (!ResponsesRequestContextParser.TryParse(
+                context,
+                requireLocalHistory: false,
+                replayLocalHistory: false,
+                out var requestData,
+                out var requestError))
         {
             await ProtocolAdapterCommon.WriteJsonErrorAsync(
                 context.HttpContext,
@@ -38,10 +43,9 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
         var requestModel = ResponsesPayloadBuilder.ExtractRequestModel(root) ?? context.Provider.DefaultModel;
 
         byte[] payload;
-        IReadOnlyList<JsonElement> upstreamMessages;
         try
         {
-            payload = BuildUpstreamPayload(context, requestData, out upstreamMessages);
+            payload = BuildUpstreamPayload(context, requestData);
         }
         catch (ProtocolConversionException ex)
         {
@@ -114,7 +118,6 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                         upstreamResponse,
                         requestModel,
                         stopwatch,
-                        upstreamMessages,
                         cancellationToken);
                     return ProviderAdapterResult.Success();
                 }
@@ -157,7 +160,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
             try
             {
                 using var document = JsonDocument.Parse(responseBody);
-                builtResponse = BuildResponsesPayload(context, requestData, upstreamMessages, document.RootElement);
+                builtResponse = BuildResponsesPayload(context, requestData, document.RootElement);
             }
             catch (JsonException ex)
             {
@@ -191,13 +194,6 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                 builtResponse.ResponseModel,
                 null);
             ProtocolAdapterCommon.Record(context, record);
-
-            SaveState(
-                context,
-                requestData,
-                builtResponse.ResponseId,
-                builtResponse.OutputItems,
-                builtResponse.OpenAiChatMessages);
 
             context.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
             context.HttpContext.Response.ContentType = "application/json";
@@ -1558,8 +1554,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
 
     private static byte[] BuildUpstreamPayload(
         ProviderRequestContext context,
-        ResponsesRequestContextData requestData,
-        out IReadOnlyList<JsonElement> upstreamMessages)
+        ResponsesRequestContextData requestData)
     {
         var root = context.RequestRoot;
         var upstreamModel = ProtocolAdapterCommon.ResolveUpstreamModel(context.Provider, context.Model);
@@ -1655,8 +1650,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                         break;
 
                     case "conversation":
-                        // Local previous_response_id replay owns conversation continuity for this adapter, so ignore the
-                        // Responses conversation container hint instead of failing the request.
+                        // Conversation containers are Responses-only; HTTP protocol conversion is stateless here.
                         break;
 
                     case "include":
@@ -1700,8 +1694,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
                 writer.WriteString("model", upstreamModel);
 
             writer.WritePropertyName("messages");
-            WriteChatMessages(writer, requestData, out var normalizedMessages);
-            upstreamMessages = normalizedMessages;
+            WriteChatMessages(writer, requestData);
 
             if (toolsValue.HasValue)
             {
@@ -2081,10 +2074,9 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
 
     private static void WriteChatMessages(
         Utf8JsonWriter writer,
-        ResponsesRequestContextData requestData,
-        out List<JsonElement> normalizedMessages)
+        ResponsesRequestContextData requestData)
     {
-        normalizedMessages = BuildChatMessages(requestData);
+        var normalizedMessages = BuildChatMessages(requestData);
         writer.WriteStartArray();
         foreach (var message in normalizedMessages)
             message.WriteTo(writer);
@@ -3131,7 +3123,6 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
     private static BuiltResponsesPayload BuildResponsesPayload(
         ProviderRequestContext context,
         ResponsesRequestContextData requestData,
-        IReadOnlyList<JsonElement> upstreamMessages,
         JsonElement upstreamRoot)
     {
         var createdAt = upstreamRoot.TryGetProperty("created", out var createdValue) && createdValue.ValueKind == JsonValueKind.Number &&
@@ -3162,11 +3153,6 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
         if (choiceMessage.HasValue)
             AppendChatChoiceOutputItems(choiceMessage.Value, outputItems, outputText);
 
-        var openAiChatMessages = new List<JsonElement>(upstreamMessages.Count + (choiceMessage.HasValue ? 1 : 0));
-        openAiChatMessages.AddRange(upstreamMessages.Select(message => message.Clone()));
-        if (choiceMessage.HasValue)
-            openAiChatMessages.Add(CreateChatHistoryAssistantMessage(choiceMessage.Value));
-
         var usage = ParseChatUsage(upstreamRoot);
         var (status, incompleteReason) = MapChatFinishReason(finishReason);
         var responseJson = BuildResponsesResponseJson(
@@ -3181,7 +3167,7 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
             status,
             incompleteReason);
 
-        return new BuiltResponsesPayload(responseId, responseJson, outputItems, usage, model, openAiChatMessages);
+        return new BuiltResponsesPayload(responseId, responseJson, outputItems, usage, model);
     }
 
     private static void AppendChatChoiceOutputItems(
@@ -3293,16 +3279,6 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
 
         using var document = JsonDocument.Parse(json);
         return document.RootElement.Clone();
-    }
-
-    private static IReadOnlyList<JsonElement> BuildStoredOpenAiChatMessages(
-        IReadOnlyList<JsonElement> upstreamMessages,
-        JsonElement assistantMessage)
-    {
-        var messages = new List<JsonElement>(upstreamMessages.Count + 1);
-        messages.AddRange(upstreamMessages.Select(message => message.Clone()));
-        messages.Add(assistantMessage.Clone());
-        return messages;
     }
 
     private static List<string> ExtractChatMessageTextParts(JsonElement message)
@@ -3624,7 +3600,6 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
         HttpResponseMessage upstreamResponse,
         string requestModel,
         Stopwatch stopwatch,
-        IReadOnlyList<JsonElement> upstreamMessages,
         CancellationToken cancellationToken)
     {
         var state = new ChatStreamingState();
@@ -3691,10 +3666,6 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
             null);
         ProtocolAdapterCommon.Record(context, record);
 
-        var openAiChatMessages = BuildStoredOpenAiChatMessages(
-            upstreamMessages,
-            CreateChatHistoryAssistantMessage(state));
-        SaveState(context, requestData, state.ResponseId, state.OutputItems, openAiChatMessages);
     }
 
     private static string BuildCreatedEventJson(
@@ -4316,22 +4287,6 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
         });
     }
 
-    private static void SaveState(
-        ProviderRequestContext context,
-        ResponsesRequestContextData requestData,
-        string responseId,
-        IReadOnlyList<JsonElement> outputItems,
-        IReadOnlyList<JsonElement> openAiChatMessages)
-    {
-        if (!requestData.Store || string.IsNullOrWhiteSpace(responseId))
-            return;
-
-        var conversation = new List<JsonElement>(requestData.ConversationItems.Count + outputItems.Count);
-        conversation.AddRange(requestData.ConversationItems.Select(item => item.Clone()));
-        conversation.AddRange(outputItems.Select(item => item.Clone()));
-        context.ResponseStateStore.Save(responseId, conversation, openAiChatMessages: openAiChatMessages);
-    }
-
     private static HttpRequestMessage CreateUpstreamRequest(ProviderRequestContext context, byte[] payload)
     {
         var provider = context.Provider;
@@ -4435,15 +4390,13 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
             string json,
             IReadOnlyList<JsonElement> outputItems,
             UsageTokens usage,
-            string? responseModel,
-            IReadOnlyList<JsonElement> openAiChatMessages)
+            string? responseModel)
         {
             ResponseId = responseId;
             Json = json;
             OutputItems = outputItems;
             Usage = usage;
             ResponseModel = responseModel;
-            OpenAiChatMessages = openAiChatMessages;
         }
 
         public string ResponseId { get; }
@@ -4455,8 +4408,6 @@ public sealed class OpenAiChatAdapter : IProviderProtocolAdapter
         public UsageTokens Usage { get; }
 
         public string? ResponseModel { get; }
-
-        public IReadOnlyList<JsonElement> OpenAiChatMessages { get; }
     }
 
     private sealed class BuiltMessagesPayload

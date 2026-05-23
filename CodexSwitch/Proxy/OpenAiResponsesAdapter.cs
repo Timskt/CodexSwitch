@@ -26,10 +26,14 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
     {
         var stopwatch = Stopwatch.StartNew();
 
-        var root = context.RequestRoot;
-        var isStream = ResponsesPayloadBuilder.ExtractStream(root);
-        var requestModel = ResponsesPayloadBuilder.ExtractRequestModel(root) ?? context.Provider.DefaultModel;
-        var payload = ResponsesPayloadBuilder.Build(root, context.Provider, context.Model, context.CostSettings);
+        var snapshot = context.RequestSnapshot;
+        var isStream = snapshot?.Stream ?? ResponsesPayloadBuilder.ExtractStream(context.RequestRoot);
+        var requestModel = snapshot is not null
+            ? snapshot.RequestModel ?? context.Provider.DefaultModel
+            : ResponsesPayloadBuilder.ExtractRequestModel(context.RequestRoot) ?? context.Provider.DefaultModel;
+        var payload = snapshot is not null
+            ? ResponsesPayloadBuilder.Build(snapshot, context.Provider, context.Model, context.CostSettings)
+            : ResponsesPayloadBuilder.Build(context.RequestRoot, context.Provider, context.Model, context.CostSettings);
         using var upstreamRequest = CreateUpstreamRequest(context, payload);
 
         HttpResponseMessage upstreamResponse;
@@ -83,11 +87,15 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
                 }
             }
 
-            var responseBody = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken);
+            var responseBytes = await upstreamResponse.Content.ReadAsByteArrayAsync(cancellationToken);
             UsageTokens usage = default;
             string? responseModel = null;
             if (upstreamResponse.IsSuccessStatusCode)
-                ResponsesUsageParser.TryParseResponseUsage(responseBody, out usage, out responseModel);
+                ResponsesUsageScanner.TryParseResponseUsage(responseBytes, out usage, out responseModel);
+
+            var responseBody = upstreamResponse.IsSuccessStatusCode
+                ? null
+                : Encoding.UTF8.GetString(responseBytes);
 
             stopwatch.Stop();
             var record = CreateRecord(
@@ -98,7 +106,7 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
                 stopwatch.ElapsedMilliseconds,
                 usage,
                 responseModel,
-                upstreamResponse.IsSuccessStatusCode ? null : responseBody);
+                responseBody);
             Record(context, record);
 
             if (!upstreamResponse.IsSuccessStatusCode &&
@@ -113,7 +121,7 @@ public sealed class OpenAiResponsesAdapter : IProviderProtocolAdapter
             if (string.IsNullOrWhiteSpace(context.HttpContext.Response.ContentType))
                 context.HttpContext.Response.ContentType = "application/json";
 
-            await context.HttpContext.Response.WriteAsync(responseBody, cancellationToken);
+            await context.HttpContext.Response.Body.WriteAsync(responseBytes, cancellationToken);
             return upstreamResponse.IsSuccessStatusCode
                 ? ProviderAdapterResult.Success()
                 : ProviderAdapterResult.NonRetryableFailure((int)upstreamResponse.StatusCode, responseBody);

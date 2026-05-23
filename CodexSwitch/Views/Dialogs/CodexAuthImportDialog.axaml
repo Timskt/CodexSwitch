@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CodexSwitch.ViewModels"
+             xmlns:ui="using:CodexSwitch.Controls"
+             xmlns:i18n="using:CodexSwitch.I18n"
+             xmlns:lucide="using:Lucide.Avalonia"
+             x:Class="CodexSwitch.Views.Dialogs.CodexAuthImportDialog"
+             x:DataType="vm:MainWindowViewModel">
+    <ui:CsDialog IsVisible="{Binding IsCodexAuthImportDialogOpen}">
+        <Border Classes="dialog-card"
+                Width="640"
+                MaxHeight="560"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="16">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel Spacing="4">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Border Width="34"
+                                    Height="34"
+                                    CornerRadius="10"
+                                    Background="#173B82F6"
+                                    BorderBrush="#333B82F6"
+                                    BorderThickness="1">
+                                <lucide:LucideIcon Kind="Upload"
+                                                   Size="17"
+                                                   StrokeWidth="2"
+                                                   Foreground="#60A5FA"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                            </Border>
+                            <ui:CsText Text="{i18n:Tr codexAuthImport.title}" Classes="title"/>
+                        </StackPanel>
+                        <ui:CsText Text="{i18n:Tr codexAuthImport.description}"
+                                   Classes="muted"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <ui:CsIconButton Grid.Column="1"
+                                     Classes="dialog-close"
+                                     Command="{Binding CancelCodexAuthImportCommand}"
+                                     ToolTip.Tip="{i18n:Tr common.close}">
+                        <lucide:LucideIcon Kind="X" Size="16" StrokeWidth="2"/>
+                    </ui:CsIconButton>
+                </Grid>
+
+                <StackPanel Grid.Row="1" Spacing="10">
+                    <ui:CsTextarea Text="{Binding CodexAuthImportJson, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                   MinHeight="260"
+                                   PlaceholderText="{i18n:Tr codexAuthImport.placeholder}"/>
+                    <ui:CsText Text="{Binding CodexAuthImportResultText}"
+                               Classes="muted"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                    <ui:CsText Text="{i18n:Tr codexAuthImport.footer}"
+                               Classes="muted"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"/>
+                    <ui:CsButton Grid.Column="1"
+                                 Classes="outline compact"
+                                 Command="{Binding CancelCodexAuthImportCommand}"
+                                 Content="{i18n:Tr common.cancel}"/>
+                    <ui:CsButton Grid.Column="2"
+                                 Classes="compact"
+                                 Command="{Binding ImportCodexAuthJsonCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <lucide:LucideIcon Kind="Upload" Size="14" StrokeWidth="2"/>
+                            <TextBlock Text="{i18n:Tr codexAuthImport.import}"/>
+                        </StackPanel>
+                    </ui:CsButton>
+                </Grid>
+            </Grid>
+        </Border>
+    </ui:CsDialog>
+</UserControl>
