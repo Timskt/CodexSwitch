@@ -51,7 +51,7 @@ CodexSwitch/
 - **70+** 设计色彩令牌
 - **20+** 组件样式文件
 - **3** 个国际化语言文件
-- **30** 个文档章节
+- **42** 个文档章节
 
 ---
 
@@ -112,6 +112,23 @@ CodexSwitch/
 | 29 | [形状与矢量绘图](29-shapes-drawing.md) | Line、Rectangle、Ellipse、Polygon、Path、PathMiniLanguage、Brush 类型 | 图标和装饰元素 |
 | 30 | [媒体控件与无障碍](30-media-accessibility.md) | Image、MediaElement、AutomationProperties、键盘导航、高对比度 | 全项目 |
 
+### 重量级应用篇 -- 系统集成与专业功能 (第 31-42 章)
+
+| # | 章节 | 核心内容 | 关键源文件 |
+|---|------|---------|-----------|
+| 31 | [系统集成](31-system-integration.md) | 文件关联、协议处理器、Jump List、开机自启动、全局快捷键、剪切板高级操作、文件系统监听 | 全项目 |
+| 32 | [窗口特效](32-window-effects.md) | 透明窗口、毛玻璃效果（Acrylic/Mica）、圆角窗口、阴影、穿透点击、窗口吸附、多显示器 | 全项目 |
+| 33 | [WebView 集成](33-webview-integration.md) | 内嵌浏览器、OutSystems WebView、WebView2、NativeControlHost、OAuth 登录、Markdown 预览 | 全项目 |
+| 34 | [本地数据存储](34-data-storage.md) | SQLite、Entity Framework Core、凭据管理（Windows/macOS/Linux）、配置文件管理、日志系统 | 全项目 |
+| 35 | [自动更新与分发](35-auto-update-packaging.md) | Velopack、Native AOT 发布、安装包制作（Inno Setup/DMG/AppImage）、代码签名、CI/CD | 全项目 |
+| 36 | [通知与任务栏](36-notifications-taskbar.md) | 应用内通知、系统原生通知（Toast/Notification Center）、任务栏进度条、ToolTip 高级用法 | 全项目 |
+| 37 | [数据可视化](37-data-visualization.md) | LiveCharts2、ScottPlot、OxyPlot、实时数据图表、自定义图表控件、环形进度图 | 全项目 |
+| 38 | [代码编辑器](38-code-editor.md) | AvaloniaEdit、TextMate 语法高亮、代码折叠、自动补全、搜索替换、Markdown 编辑器 | 全项目 |
+| 39 | [测试](39-testing.md) | Avalonia.Headless、xUnit 集成、ViewModel 测试、UI 自动化测试、截图测试、集成测试 | 全项目 |
+| 40 | [性能优化](40-performance.md) | 渲染管线、GPU 加速（Vulkan/Metal）、UI 虚拟化、编译绑定、内存管理、性能分析 | 全项目 |
+| 41 | [网络通信](41-networking.md) | HttpClient、Refit、WebSocket、SignalR、gRPC、网络状态检测、代理配置 | 全项目 |
+| 42 | [安全](42-security.md) | OAuth2/OIDC 认证、JWT Token 管理、数据加密、安全存储、输入验证、代码签名 | 全项目 |
+
 ---
 
 ## 如何使用本指南
@@ -122,6 +139,7 @@ CodexSwitch/
 2. **中级开发者** (第 6-10 章): 学习 MVVM 架构、样式系统、自定义控件开发
 3. **高级开发者** (第 11-21 章): 掌握专业级技巧，如 i18n、拖拽、自定义渲染、AOT
 4. **框架专家** (第 22-25 章): 深入理解属性系统、视觉树、资源系统等内部原理
+5. **重量级应用开发** (第 31-42 章): 系统集成、窗口特效、WebView、数据库、自动更新、图表、编辑器、测试、性能优化、网络安全
 
 ### 按主题查找
 
@@ -146,6 +164,18 @@ CodexSwitch/
 | 数据表格与树形控件 | 第 27 章 |
 | 矢量绘图与形状 | 第 29 章 |
 | 无障碍与媒体 | 第 30 章 |
+| 系统集成（文件关联、全局快捷键） | 第 31 章 |
+| 窗口特效（透明、毛玻璃、圆角） | 第 32 章 |
+| 内嵌浏览器 | 第 33 章 |
+| 数据库与安全存储 | 第 34 章 |
+| 自动更新与分发 | 第 35 章 |
+| 通知与任务栏 | 第 36 章 |
+| 数据可视化与图表 | 第 37 章 |
+| 代码编辑器 | 第 38 章 |
+| 测试策略 | 第 39 章 |
+| 性能优化 | 第 40 章 |
+| 网络通信 | 第 41 章 |
+| 安全与认证 | 第 42 章 |
 
 ### 每章结构
 
