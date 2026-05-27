@@ -256,6 +256,8 @@ public class DebugConverter : IValueConverter
 
 ### 21.4.3 绑定错误时中断
 
+> **注意**：`Binding.Diagnostics` API 在 Avalonia 11.x 中引入，具体可用版本请参考官方文档。以下示例展示诊断绑定错误的思路。
+
 ```csharp
 // 在 App.axaml.cs 中，绑定错误时自动中断
 public override void OnFrameworkInitializationCompleted()
@@ -559,16 +561,12 @@ public static AppBuilder BuildAvaloniaApp()
 // 获取当前帧率
 var fps = CompositionTarget.FrameCount;
 
-// 获取渲染统计
-var renderStats = AvaloniaLocator.Current.GetService<IRenderTimer>();
-if (renderStats != null)
+// 监听每帧渲染事件（用于性能分析）
+CompositionTarget.Rendering += (sender, e) =>
 {
-    Debug.WriteLine($"渲染帧数: {renderStats.Count}");
-}
-
-// 检查渲染线程
-var renderThread = AvaloniaLocator.Current.GetService<IRenderThread>();
-Debug.WriteLine($"渲染线程: {renderThread?.ManagedThreadId}");
+    // 每帧触发，可用于测量帧率
+    Debug.WriteLine($"渲染时间: {e.RenderingTime}");
+};
 ```
 
 ## 21.8 CodexSwitch 实战：调试技术应用

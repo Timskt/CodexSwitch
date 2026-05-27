@@ -1227,6 +1227,8 @@ Window (定义全局样式)
 - **[第 6 章：MVVM 模式](06-mvvm-pattern.md)** — 了解 ViewModel 与样式的配合
 - **[第 8 章：DataTemplate](08-data-templates.md)** — 了解 DataTemplate 中的样式
 - **[第 9 章：自定义控件](09-custom-controls.md)** — ControlTemplate 的高级用法
+- **[第 22 章：属性系统](22-property-system.md)** — 了解 StyledProperty 如何支持样式覆盖
+- **[第 24 章：资源系统](24-resource-system.md)** — 了解资源查找机制和主题切换
 
 ## 7.13 Common Pitfalls
 

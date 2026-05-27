@@ -524,11 +524,10 @@ Canvas.SetLeft(rect, 100.5); // 可能模糊
 // 当窗口在不同 DPI 的显示器间移动时
 
 // 监听 DPI 变化
-protected override void OnDpiChanged(RoutedEventArgs e)
-{
-    // 窗口移动到不同 DPI 的显示器时触发
-    // 可以在这里调整布局
-}
+// Avalonia 没有 OnDpiChanged 虚方法，但可以通过以下方式获取 DPI：
+// 1. VisualRoot?.RenderScaling — 获取当前渲染缩放
+// 2. Screens.Primary.Scaling — 获取主屏幕缩放
+// 3. 监听窗口位置变化，检测是否跨越不同 DPI 的显示器
 
 // 确保自定义控件正确响应 DPI
 public class CustomControl : Control

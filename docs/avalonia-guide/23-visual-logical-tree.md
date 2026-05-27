@@ -670,8 +670,9 @@ control.Opacity = 0.5;  // 不会触发重绘
 // 3. 使用 RenderTransform 而非 LayoutTransform
 control.RenderTransform = new RotateTransform(45);  // 不会触发布局
 
-// 4. 使用缓存
-control.CacheMode = new BitmapCache();
+// 4. 减少不必要的重绘（使用 AffectsRender 精确控制）
+// Avalonia 没有 WPF 的 CacheMode/BitmapCache，
+// 但可以通过合理使用 RenderTransform 和避免频繁布局来优化
 ```
 
 ## 23.11 视觉树在事件路由中的作用

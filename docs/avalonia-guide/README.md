@@ -51,6 +51,7 @@ CodexSwitch/
 - **70+** 设计色彩令牌
 - **20+** 组件样式文件
 - **3** 个国际化语言文件
+- **30** 个文档章节
 
 ---
 
@@ -101,6 +102,16 @@ CodexSwitch/
 | 24 | [资源系统](24-resource-system.md) | avares://、资源字典、StaticResource vs DynamicResource、字体/图标资源 | `CodexTheme.axaml`, `App.axaml` |
 | 25 | [Avalonia 与 ASP.NET Core 集成](25-aspnet-integration.md) | 嵌入 HTTP 服务器、WebSocket 代理、线程模型、生命周期管理 | `Proxy/` 目录 |
 
+### 补充篇 — 控件与平台能力 (第 26-30 章)
+
+| # | 章节 | 核心内容 | 关键源文件 |
+|---|------|---------|-----------|
+| 26 | [导航控件与页面路由](26-navigation-controls.md) | TabControl、Expander、Frame、NavigationView、ContentControl 导航 | `MainWindow.axaml` |
+| 27 | [数据展示控件](27-data-controls.md) | DataGrid、TreeView、TreeDataGrid、虚拟化、ListBox、ComboBox | `ProvidersPage.axaml` |
+| 28 | [高级输入控件](28-input-controls.md) | NumericUpDown、DatePicker、TimePicker、AutoCompleteBox、Slider、ProgressBar | 表单页面 |
+| 29 | [形状与矢量绘图](29-shapes-drawing.md) | Line、Rectangle、Ellipse、Polygon、Path、PathMiniLanguage、Brush 类型 | 图标和装饰元素 |
+| 30 | [媒体控件与无障碍](30-media-accessibility.md) | Image、MediaElement、AutomationProperties、键盘导航、高对比度 | 全项目 |
+
 ---
 
 ## 如何使用本指南
@@ -126,11 +137,15 @@ CodexSwitch/
 | 多窗口管理 | 第 12 章 |
 | 拖拽交互 | 第 13 章 |
 | 性能优化 | 第 15、21 章 |
-| 输入处理 | 第 16 章 |
+| 输入处理 | 第 16、28 章 |
 | 对话框 | 第 17 章 |
 | 命令模式 | 第 18 章 |
 | 跨平台开发 | 第 20 章 |
 | 框架原理 | 第 22-25 章 |
+| 导航与页面路由 | 第 26 章 |
+| 数据表格与树形控件 | 第 27 章 |
+| 矢量绘图与形状 | 第 29 章 |
+| 无障碍与媒体 | 第 30 章 |
 
 ### 每章结构
 

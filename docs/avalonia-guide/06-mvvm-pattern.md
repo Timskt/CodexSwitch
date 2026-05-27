@@ -959,3 +959,11 @@ Dispatcher.UIThread.Post(() => { /* ... */ });
 2. 使用 INotifyDataErrorInfo 接口
 3. 在 AXAML 中显示验证错误
 4. 测试验证逻辑
+
+## Cross References
+
+- **[第 1 章：Avalonia 概览](01-avalonia-overview.md)** — 了解 Avalonia 的整体架构和 MVVM 设计理念
+- **[第 3 章：AXAML 基础](03-axaml-fundamentals.md)** — 学习 AXAML 中的 Command 绑定和 x:DataType
+- **[第 5 章：数据绑定](05-data-binding.md)** — 理解 ViewModel 如何通过绑定驱动 UI
+- **[第 8 章：DataTemplate](08-data-templates.md)** — 掌握 DataTemplate 中的 ViewModel 绑定
+- **[第 18 章：命令系统](18-commands.md)** — 深入学习 RelayCommand、AsyncRelayCommand 的实现原理

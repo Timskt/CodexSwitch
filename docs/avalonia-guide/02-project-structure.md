@@ -580,7 +580,7 @@ CodexSwitch 使用 `Directory.Packages.props` 实现中央包版本管理：
     <ItemGroup>
         <PackageVersion Include="Avalonia" Version="12.0.3" />
         <PackageVersion Include="Avalonia.Desktop" Version="12.0.3" />
-        <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+        <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
         <!-- ... -->
     </ItemGroup>
 </Project>

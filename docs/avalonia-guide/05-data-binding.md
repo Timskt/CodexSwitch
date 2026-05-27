@@ -405,16 +405,15 @@ public class BoolToVisibilityConverter : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
+        // Avalonia 的 IsVisible 是 bool 类型，不是 WPF 的 Visibility 枚举
         if (value is bool boolValue)
-            return boolValue ? Visibility.Visible : Visibility.Hidden;
-        return Visibility.Hidden;
+            return boolValue;
+        return false;
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is Visibility visibility)
-            return visibility == Visibility.Visible;
-        return false;
+        return value is true;
     }
 }
 ```
@@ -653,6 +652,8 @@ public abstract class ObservableObject : INotifyPropertyChanged, INotifyProperty
 - **[第 3 章：AXAML 基础](03-axaml-fundamentals.md)** — 学习 AXAML 中的绑定语法和 MarkupExtension
 - **[第 6 章：MVVM 模式](06-mvvm-pattern.md)** — 理解 ViewModel 如何通过 [ObservableProperty] 驱动绑定
 - **[第 8 章：DataTemplate](08-data-templates.md)** — 掌握 DataTemplate 中的绑定
+- **[第 15 章：编译绑定](15-compiled-bindings.md)** — 深入了解 x:DataType 和编译绑定的内部机制
+- **[第 19 章：值转换器](19-value-converters.md)** — 学习 IValueConverter 和 IMultiValueConverter 的高级用法
 
 ## Common Pitfalls
 

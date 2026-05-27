@@ -44,7 +44,7 @@ MeasureOverride() -> ArrangeOverride() -> Render()
 
 | 方法 | 作用 | 参数 |
 |------|------|------|
-| `DrawRectangle` | 绘制矩形 | brush, pen, rect, radiusX, radiusY |
+| `DrawRectangle` | 绘制矩形 | brush, pen, rect, radiusX, radiusY, boxShadows |
 | `DrawEllipse` | 绘制椭圆 | brush, pen, center, radiusX, radiusY |
 | `DrawLine` | 绘制线段 | pen, point1, point2 |
 | `DrawGeometry` | 绘制几何路径 | brush, pen, geometry |
@@ -151,11 +151,11 @@ var pen = new Pen(
     lineJoin: PenLineJoin.Round,     // 线连接样式
     miterLimit: 10);                 // 斜接限制
 
-// 预定义 DashStyle
-DashStyle.Solid    // 实线
-DashStyle.Dash     // 虚线
-DashStyle.Dot      // 点线
-DashStyle.DashDot  // 点划线
+// 预定义 DashStyle（不设置 DashStyle 或设为 null 即为实线）
+DashStyle.Dash      // 虚线
+DashStyle.Dot       // 点线
+DashStyle.DashDot   // 点划线
+DashStyle.DashDotDot // 双点划线
 ```
 
 ### 14.2.5 坐标系
@@ -353,8 +353,20 @@ using (context.PushClip(new Rect(0, 0, 100, 100)))
     layout.Draw(context, new Point(-20, -20)); // 部分被裁剪
 }
 
-// 圆角裁剪
-var clipGeometry = new RoundedRectangleGeometry(new Rect(0, 0, 100, 100), 8);
+// 圆角裁剪（使用 StreamGeometry 构建圆角矩形路径）
+var clipGeometry = new StreamGeometry();
+using (var ctx = clipGeometry.Open())
+{
+    ctx.BeginFigure(new Point(8, 0), true);
+    ctx.ArcTo(new Point(0, 8), new Size(8, 8), 0, false, SweepDirection.CounterClockwise);
+    ctx.LineTo(new Point(0, 92));
+    ctx.ArcTo(new Point(8, 100), new Size(8, 8), 0, false, SweepDirection.CounterClockwise);
+    ctx.LineTo(new Point(92, 100));
+    ctx.ArcTo(new Point(100, 92), new Size(8, 8), 0, false, SweepDirection.CounterClockwise);
+    ctx.LineTo(new Point(100, 8));
+    ctx.ArcTo(new Point(92, 0), new Size(8, 8), 0, false, SweepDirection.CounterClockwise);
+    ctx.EndFigure(true);
+}
 using (context.PushGeometryClip(clipGeometry))
 {
     // 此处绘制的内容被圆角矩形裁剪

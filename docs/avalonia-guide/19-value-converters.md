@@ -53,12 +53,13 @@ public class BoolToVisibilityConverter : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        return value is true ? Visibility.Visible : Visibility.Collapsed;
+        // Avalonia 的 IsVisible 是 bool 类型，不是 WPF 的 Visibility 枚举
+        return value is true;
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        return value is Visibility.Visible;
+        return value is true;
     }
 }
 ```
@@ -75,12 +76,13 @@ public class BoolToVisibilityConverter : IValueConverter
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        return value is true ? Visibility.Visible : Visibility.Collapsed;
+        // Avalonia 的 IsVisible 是 bool 类型，不是 WPF 的 Visibility 枚举
+        return value is true;
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        return value is Visibility.Visible;
+        return value is true;
     }
 }
 ```
@@ -117,12 +119,14 @@ public class BoolToVisibilityConverter : IValueConverter
         if (parameter?.ToString() == "reverse")
             boolValue = !boolValue;
 
-        return boolValue ? Visibility.Visible : Visibility.Collapsed;
+        // Avalonia 的 IsVisible 是 bool 类型，不是 WPF 的 Visibility 枚举
+        return boolValue;
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        bool isVisible = value is Visibility.Visible;
+        // Avalonia 的 IsVisible 是 bool 类型
+        bool isVisible = value is true;
 
         if (parameter?.ToString() == "reverse")
             isVisible = !isVisible;

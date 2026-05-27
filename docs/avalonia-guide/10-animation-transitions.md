@@ -521,29 +521,35 @@ if (animation is not null)
 }
 ```
 
-### 10.4.3 PhysicsAnimator — 弹簧动画
+### 10.4.3 物理动画（概念说明）
 
-Avalonia 的 `PhysicsAnimator` 提供基于物理的弹簧动画：
+> **注意**：以下代码为概念性示例，Avalonia 标准库中没有 `PhysicsAnimator` 和 `SpringAnimator` 类。如需物理动画效果，可使用 `Transitions` 配合自定义 `Easing` 函数模拟。
+
+Avalonia 可以通过自定义缓动函数模拟弹簧动画效果：
 
 ```csharp
-// 使用弹簧动画移动元素
-var spring = new Spring(stiffness: 300, damping: 20, mass: 1);
-var animator = new SpringAnimator(spring);
+// 使用 Transition + 自定义缓动函数模拟弹簧效果
+myControl.Transitions = new Transitions
+{
+    new DoubleTransition
+    {
+        Property = TranslateTransform.YProperty,
+        Duration = TimeSpan.FromSeconds(0.5),
+        Easing = new ElasticEaseOut { Oscillations = 3 }
+    }
+};
 
-animator.From = 0;
-animator.To = 200;
-animator.TargetProperty = TranslateTransform.YProperty;
-
-await animator.RunAsync(myControl, CancellationToken.None);
+// 触发动画（设置目标值）
+myControl.RenderTransform = new TranslateTransform(0, 200);
 ```
 
-**Spring 参数说明**
+**模拟弹簧效果的缓动函数**
 
-| 参数 | 说明 | 增大效果 |
-|------|------|---------|
-| `stiffness` | 弹簧刚度 | 振动更快 |
-| `damping` | 阻尼 | 振动更少 |
-| `mass` | 质量 | 振动更慢 |
+| 缓动函数 | 效果 | 适用场景 |
+|---------|------|---------|
+| `ElasticEaseOut` | 弹性回弹 | 弹簧效果 |
+| `BounceEaseOut` | 弹跳 | 落地效果 |
+| `CubicEaseOut` | 平滑减速 | 自然停止 |
 
 ## 10.5 CodexSwitch 实战
 

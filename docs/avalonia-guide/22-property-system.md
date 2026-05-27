@@ -651,20 +651,27 @@ static MyControl()
 
 ### 22.8.3 AffectsParentMeasure
 
+> **注意**：`AffectsParentMeasure<T>` 和 `AffectsParentArrange<T>` 是 `Panel` 类的方法（不是 `Layoutable`），只能在继承自 `Panel` 的容器控件中使用。
+
 ```csharp
 // AffectsParentMeasure 声明哪些属性变化时需要父控件重新测量
-static MyControl()
+// 注意：此方法仅在 Panel 子类中可用
+public class MyPanel : Panel
 {
-    // 这些属性变化时，父控件需要重新测量
-    AffectsParentMeasure<MyControl>(
-        WidthProperty,
-        HeightProperty,
-        MarginProperty);
+    static MyPanel()
+    {
+        // 这些属性变化时，父控件需要重新测量
+        AffectsParentMeasure<MyPanel>(
+            WidthProperty,
+            HeightProperty,
+            MarginProperty);
+    }
 }
 
 // 什么时候需要 AffectsParentMeasure：
 // - 属性变化会影响父控件的布局
 // - 例如：子控件的 Margin 变化会影响父控件的排列
+// - 典型场景：自定义面板中的子元素属性变化
 ```
 
 ### 22.8.4 完整示例

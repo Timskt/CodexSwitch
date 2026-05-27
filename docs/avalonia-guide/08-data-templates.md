@@ -474,28 +474,34 @@ protected override Size MeasureOverride(Size availableSize)
 }
 ```
 
-### ItemsSourceView
+### ItemsSourceView（概念说明）
 
-`ItemsSourceView` 是 Avalonia 对数据源的抽象：
+> **注意**：`ItemsSourceView` 是 WinUI 3 的 API，Avalonia 中没有这个类。Avalonia 直接使用 `IEnumerable`/`IList` 作为数据源，通过 `INotifyCollectionChanged` 接口实现集合变化通知。
+
+Avalonia 的数据源抽象方式：
 
 ```csharp
-// ItemsSourceView 提供统一的数据访问接口
-public class ItemsSourceView
-{
-    public int Count { get; }
-    public object? this[int index] { get; }
-    public bool HasKeyIndexMapping { get; }
-    public IObservableVector<object> Collection { get; }
+// Avalonia 直接支持以下数据源类型：
+// 1. IEnumerable — 基础数据源
+// 2. IList — 支持索引访问
+// 3. INotifyCollectionChanged — 集合变化通知（ObservableCollection<T>）
+// 4. ICollectionView — 分组、排序、筛选视图
 
-    // 监听集合变化
-    public event NotifyCollectionChangedEventHandler CollectionChanged;
+// 示例：使用 ObservableCollection 作为数据源
+public class MyViewModel
+{
+    // 自动支持集合变化通知
+    public ObservableCollection<ItemModel> Items { get; } = new();
+
+    // 添加项时，绑定到此集合的 ItemsControl 自动更新
+    public void AddItem(ItemModel item) => Items.Add(item);
 }
 ```
 
 它支持：
-- `IList`、`IEnumerable`、`IObservableCollection` 等多种数据源
-- 集合变化通知
-- 索引映射（用于分组场景）
+- `IList`、`IEnumerable`、`ObservableCollection` 等多种数据源
+- 通过 `INotifyCollectionChanged` 实现集合变化通知
+- 通过 `ICollectionView` 支持分组、排序、筛选
 
 ## 8.10 深入：虚拟化面板自定义
 
@@ -1145,3 +1151,12 @@ var template = new FuncDataTemplate<UsageLogItem>((item, _) =>
     </Border>
 </DataTemplate>
 ```
+
+## Cross References
+
+- **[第 3 章：AXAML 基础](03-axaml-fundamentals.md)** — 学习 DataTemplate 中的 x:DataType 和绑定语法
+- **[第 5 章：数据绑定](05-data-binding.md)** — 理解 DataTemplate 中的绑定模式和编译绑定
+- **[第 6 章：MVVM 模式](06-mvvm-pattern.md)** — 了解 ViewModel 如何为 DataTemplate 提供数据
+- **[第 7 章：样式与主题](07-styling-theming.md)** — 了解 DataTemplate 中的样式和资源引用
+- **[第 9 章：自定义控件](09-custom-controls.md)** — 掌握 ItemsControl 和 ContentControl 的模板机制
+- **[第 13 章：拖拽交互](13-drag-drop.md)** — 了解 DataTemplate 中的拖拽手柄实现
