@@ -1,6 +1,24 @@
 # 2. 项目结构与启动流程
 
-## 2.1 Avalonia 项目文件 (.csproj)
+> **写给零基础的你**：这一章会介绍一个 Avalonia 项目里都有哪些文件，每个文件是干什么的。就像你搬进一个新房子，先要知道哪个房间是卧室、哪个是厨房。
+
+## 2.1 概述
+
+理解 Avalonia 项目的文件结构和启动流程是开发高质量应用的基础。本章将深入讲解 `.csproj` 的每个重要属性、`Program.cs` 的启动流程、`App.axaml` 和 `App.axaml.cs` 的生命周期等核心知识点。
+
+学完本章后，你将能够：
+- 理解 Avalonia 项目里每个文件的作用
+- 理解项目配置文件（.csproj）的含义
+- 理解程序是怎么启动的
+- 理解应用程序的生命周期（从启动到关闭的过程）
+
+## 2.2 核心概念
+
+### 2.2.1 项目文件 (.csproj) 详解
+
+> **什么是 .csproj 文件？** 这是 C# 项目的"身份证"。它告诉编译器：这个项目用什么版本的 .NET、需要哪些依赖包、输出什么类型的文件等。`.csproj` 是 "C# Project" 的缩写。
+
+> **什么是 XML？** 你看到的 `<xxx>内容</xxx>` 这种格式就是 XML。它是一种标记语言，用标签来组织信息。就像 HTML 用 `<h1>` 表示标题一样，XML 用自定义标签来描述数据。你不需要精通 XML，只需要知道 `<标签名>值</标签名>` 这个基本格式就行。
 
 CodexSwitch 的项目文件展示了 Avalonia 应用的典型配置：
 
@@ -10,182 +28,326 @@ CodexSwitch 的项目文件展示了 Avalonia 应用的典型配置：
         <OutputType>WinExe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
-
-        <!-- 编译绑定：编译时检查绑定表达式，而非运行时 -->
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <ApplicationIcon>Assets\favicon.ico</ApplicationIcon>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-
-        <!-- Native AOT 发布支持 -->
         <PublishAot>true</PublishAot>
         <TrimMode>full</TrimMode>
-
-        <!-- 保留全球化支持（i18n 需要） -->
         <InvariantGlobalization>false</InvariantGlobalization>
     </PropertyGroup>
-
-    <!-- 将 Assets 目录下所有文件作为 Avalonia 资源嵌入 -->
-    <ItemGroup>
-        <AvaloniaResource Include="Assets\**" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Avalonia" />
-        <PackageReference Include="Avalonia.Desktop" />
-        <PackageReference Include="Avalonia.Themes.Fluent" />
-        <PackageReference Include="CommunityToolkit.Mvvm" />
-        <PackageReference Include="Lucide.Avalonia" />
-    </ItemGroup>
+    <!-- ... -->
 </Project>
 ```
 
-### 关键知识点
+#### OutputType 属性
 
-- **`AvaloniaUseCompiledBindingsByDefault`**: 启用编译时绑定检查，在编译期就能发现绑定错误，而非运行时
-- **`AvaloniaResource`**: 将文件嵌入程序集，通过 `avares://` URI 访问
-- **`PublishAot` + `TrimMode=full`**: 启用 Native AOT 编译，生成无依赖的原生可执行文件
-- **`InvariantGlobalization=false`**: 必须设为 false，否则 i18n 和数字格式化会出问题
+`OutputType` 决定了编译输出的类型：
 
-### NuGet 包说明
+| 值 | 说明 | 适用场景 |
+|---|------|---------|
+| `WinExe` | Windows 应用程序（无控制台窗口） | 桌面 GUI 应用 |
+| `Exe` | 控制台应用程序（有控制台窗口） | CLI 工具、调试阶段 |
+| `Library` | 类库（DLL） | 组件库、插件 |
 
-| 包 | 作用 |
-|---|---|
-| `Avalonia` | 核心框架 |
-| `Avalonia.Desktop` | 桌面平台支持 (Windows/macOS/Linux) |
-| `Avalonia.Themes.Fluent` | Fluent 主题（可选，本项目用自定义主题） |
-| `CommunityToolkit.Mvvm` | MVVM 框架，提供源代码生成器 |
-| `Lucide.Avalonia` | Lucide 图标的 Avalonia 集成 |
+对于 Avalonia 桌面应用，应使用 `WinExe`。如果你在开发阶段需要查看控制台输出，可以临时改为 `Exe`。
 
-### 项目属性详解
+#### TargetFramework 属性
 
-**OutputType**：
-- `WinExe`：Windows 应用程序（无控制台窗口）
-- `Exe`：控制台应用程序（有控制台窗口）
-- `Library`：类库（DLL）
+`TargetFramework` 指定目标框架：
 
-**TargetFramework**：
-- `net10.0`：.NET 10 目标框架
-- `net8.0`：.NET 8 目标框架（LTS 版本）
-- `net6.0`：.NET 6 目标框架（LTS 版本，但 Avalonia 12+ 需要 .NET 8+）
+| 值 | 说明 | Avalonia 支持 |
+|---|------|--------------|
+| `net10.0` | .NET 10 | Avalonia 12+ |
+| `net9.0` | .NET 9 | Avalonia 11.2+ |
+| `net8.0` | .NET 8 (LTS) | Avalonia 11.0+ |
+| `net6.0` | .NET 6 (LTS) | Avalonia 0.10.x |
 
-**Nullable**：
-- `enable`：启用可空引用类型检查
-- `disable`：禁用可空引用类型检查
-- `warnings`：只显示警告，不报错
+CodexSwitch 使用 `net10.0`，因为项目使用了 .NET 10 的新特性（如 `FrameworkReference` 引用 ASP.NET Core）。
 
-**PublishAot**：
-- `true`：启用 Native AOT 编译
-- `false`：禁用 Native AOT 编译（默认）
+#### Nullable 属性
 
-**TrimMode**：
-- `full`：完全裁剪未使用的代码
-- `partial`：部分裁剪（更安全，但文件更大）
-- `link`：链接模式（传统方式）
+`Nullable` 启用可空引用类型检查：
 
-**InvariantGlobalization**：
+```xml
+<Nullable>enable</Nullable>   <!-- 启用，推荐 -->
+<Nullable>disable</Nullable>  <!-- 禁用 -->
+<Nullable>warnings</Nullable> <!-- 只警告不报错 -->
+```
+
+启用后，编译器会检查可能的空引用异常：
+
+```csharp
+string? name = null;  // 可空类型
+string name = null;   // 编译警告：可能的空引用
+
+if (name is not null)
+{
+    Console.WriteLine(name.Length);  // 安全访问
+}
+```
+
+#### AvaloniaUseCompiledBindingsByDefault 属性
+
+这是 Avalonia 特有的属性，启用编译绑定：
+
+```xml
+<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+```
+
+启用后：
+- 所有绑定表达式在编译时验证
+- 生成强类型的绑定代码
+- 支持 Native AOT 编译
+- 必须在每个 AXAML 文件中设置 `x:DataType`
+
+#### PublishAot 和 TrimMode 属性
+
+```xml
+<PublishAot>true</PublishAot>
+<TrimMode>full</TrimMode>
+```
+
+- `PublishAot`：启用 Native AOT 编译，生成无依赖的原生可执行文件
+- `TrimMode=full`：完全裁剪未使用的代码，减小文件体积
+
+**注意**：AOT 编译不支持动态反射，需要使用源代码生成器（如 CommunityToolkit.Mvvm）。
+
+#### InvariantGlobalization 属性
+
+```xml
+<InvariantGlobalization>false</InvariantGlobalization>
+```
+
 - `true`：使用不变全球化（不支持本地化）
-- `false`：支持本地化（i18n 必需）
+- `false`：支持本地化（i18n 必须）
 
-## 2.2 入口点 Program.cs
+**重要**：如果应用需要支持多语言，必须设置为 `false`。Native AOT 编译时默认为 `true`，需要显式设置为 `false`。
+
+#### ApplicationManifest 和 ApplicationIcon
+
+```xml
+<ApplicationManifest>app.manifest</ApplicationManifest>
+<ApplicationIcon>Assets\favicon.ico</ApplicationIcon>
+```
+
+- `ApplicationManifest`：Windows 应用清单文件，用于 DPI 感知、权限声明等
+- `ApplicationIcon`：应用程序图标，显示在任务栏和文件管理器中
+
+### 2.2.2 AvaloniaResource 资源嵌入
+
+```xml
+<ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+</ItemGroup>
+```
+
+`AvaloniaResource` 将文件嵌入程序集，通过 `avares://` URI 访问：
+
+```csharp
+// 在代码中加载资源
+using var stream = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/favicon.ico"));
+```
+
+```xml
+<!-- 在 AXAML 中引用资源 -->
+<Image Source="avares://CodexSwitch/Assets/logo.png"/>
+<StyleInclude Source="avares://CodexSwitch/Styles/CodexTheme.axaml"/>
+```
+
+**AvaloniaResource vs ContentResource vs None：**
+
+| 类型 | URI | 访问方式 | 适用场景 |
+|------|-----|---------|---------|
+| AvaloniaResource | `avares://Assembly/Path` | `AssetLoader.Open()` | 嵌入资源（推荐） |
+| ContentResource | 文件路径 | `File.OpenRead()` | 运行时可修改的文件 |
+| None | 无 | 无 | 源代码文件 |
+
+### 2.2.3 框架引用
+
+```xml
+<ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+</ItemGroup>
+```
+
+CodexSwitch 引用了 ASP.NET Core 框架，因为它内嵌了 Kestrel 本地代理服务器。这是 .NET 项目引用框架组件的方式。
+
+### 2.2.4 项目引用
+
+```xml
+<ItemGroup>
+    <ProjectReference Include="..\CodexSwitchUI\src\CodexSwitchUI\CodexSwitchUI.csproj" />
+    <ProjectReference Include="..\CodexSwitchUI\src\CodexSwitchUI.ECharts\CodexSwitchUI.ECharts.csproj" />
+</ItemGroup>
+```
+
+CodexSwitch 引用了两个 UI 组件库（Git 子模块）：
+- `CodexSwitchUI`：自定义控件库（侧边栏、卡片、按钮等）
+- `CodexSwitchUI.ECharts`：ECharts 图表集成
+
+### 2.2.5 NuGet 包引用
+
+> **小白提示**：NuGet 包就像"现成的零件"。你不需要自己造轮子，直接从 NuGet（微软的包管理平台）下载别人做好的组件来用。就像你装修房子，不需要自己造门锁，直接买现成的装上就行。
+
+```xml
+<ItemGroup>
+    <PackageReference Include="Avalonia" />              <!-- 核心框架 -->
+    <PackageReference Include="Avalonia.Desktop" />      <!-- 桌面平台支持 -->
+    <PackageReference Include="Avalonia.Themes.Fluent" /> <!-- Fluent 主题 -->
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport">  <!-- 诊断工具 -->
+        <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+        <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="CommunityToolkit.Mvvm" />  <!-- MVVM 框架 -->
+    <PackageReference Include="Lucide.Avalonia" />        <!-- 图标库 -->
+</ItemGroup>
+```
+
+**包说明：**
+
+| 包 | 作用 | 类比 |
+|---|------|------|
+| `Avalonia` | 核心框架，包含控件、布局、绑定等 | 房子的地基和框架 |
+| `Avalonia.Desktop` | 桌面平台支持（Windows/macOS/Linux） | 门和窗户（让房子能住人） |
+| `Avalonia.Themes.Fluent` | Fluent 主题（可选） | 装修风格 |
+| `AvaloniaUI.DiagnosticsSupport` | 诊断工具（仅 Debug 配置） | 维修工具（只在装修时用） |
+| `CommunityToolkit.Mvvm` | MVVM 框架，提供源代码生成器 | 自动化工具（帮你省力） |
+| `Lucide.Avalonia` | Lucide 图标的 Avalonia 集成 | 图标素材库 |
+
+**条件包引用**：`AvaloniaUI.DiagnosticsSupport` 只在 Debug 配置下包含，Release 配置下完全排除。这避免了诊断工具影响发布版本的性能。就像装修时用的脚手架，装修完了就拆掉。
+
+## 2.3 进阶用法
+
+### 2.3.1 AppBuilder 配置详解
+
+`AppBuilder` 是 Avalonia 的启动配置器，提供了流畅的 API 来配置应用：
+
+```csharp
+public static AppBuilder BuildAvaloniaApp()
+    => AppBuilder.Configure<App>()
+        .UsePlatformDetect()
+        .With(new FontManagerOptions
+        {
+            DefaultFamilyName = AppFonts.DefaultFontFamily,
+            FontFallbacks = [
+                new FontFallback { FontFamily = new FontFamily(AppFonts.DefaultFontFamily) }
+            ]
+        })
+        .LogToTrace();
+```
+
+**AppBuilder 的所有配置方法：**
+
+```csharp
+AppBuilder.Configure<App>()
+    // 平台配置
+    .UsePlatformDetect()  // 自动检测平台
+
+    // 字体配置
+    .With(new FontManagerOptions
+    {
+        DefaultFamilyName = "Inter",
+        FontFallbacks = [
+            new FontFallback { FontFamily = new FontFamily("Arial") }
+        ]
+    })
+
+    // 日志配置
+    .LogToTrace()  // 输出到 Trace
+    .LogToTrace(LogEventLevel.Debug)  // 指定日志级别
+
+    // Windows 渲染配置
+    .With(new Win32PlatformOptions
+    {
+        RenderingMode = [
+            Win32RenderingMode.AngleEgl,
+            Win32RenderingMode.Wgl
+        ]
+    })
+
+    // X11 配置（Linux）
+    .With(new X11PlatformOptions
+    {
+        RenderingMode = [
+            X11RenderingMode.Glx,
+            X11RenderingMode.Egl
+        ]
+    })
+
+    // macOS 配置
+    .With(new AvaloniaNativePlatformOptions
+    {
+        RenderingMode = [
+            AvaloniaNativeRenderingMode.Metal,
+            AvaloniaNativeRenderingMode.OpenGl
+        ]
+    });
+```
+
+### 2.3.2 Program.cs 启动流程详解
 
 ```csharp
 sealed class Program
 {
-    [STAThread]  // 必须标记为 STA 线程
+    [STAThread]
     public static void Main(string[] args)
     {
-        // 支持 CLI 参数：直接执行配置写入，不启动 UI
+        // 1. CLI 模式：直接执行配置写入，不启动 UI
         if (StartupLaunchOptions.ShouldBootstrapClaudeConfig(args))
         {
             ClaudeBootstrapConfigWriter.TryApplyForCurrentUser();
             return;
         }
 
+        // 2. GUI 模式：启动 Avalonia 应用
         BuildAvaloniaApp()
             .StartWithClassicDesktopLifetime(args);
     }
 
-    // 这个方法也被 Avalonia 设计器使用
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
-            .UsePlatformDetect()  // 自动检测平台 (Win/X11/macOS)
-            .With(new FontManagerOptions
-            {
-                DefaultFamilyName = AppFonts.DefaultFontFamily,
-                FontFallbacks =
-                [
-                    new FontFallback { FontFamily = new FontFamily(AppFonts.DefaultFontFamily) }
-                ]
-            })
-            .LogToTrace();  // 将 Avalonia 日志输出到 Trace
+            .UsePlatformDetect()
+            .With(new FontManagerOptions { /* ... */ })
+            .LogToTrace();
 }
 ```
 
-### 知识点
+**启动流程：**
 
-1. **`[STAThread]`**: Avalonia 要求主线程是 STA（单线程公寓），这与 WPF 一致
-2. **`AppBuilder.Configure<App>()`**: 泛型参数指定 Application 类型
-3. **`UsePlatformDetect()`**: 自动选择当前平台的渲染后端
-4. **`FontManagerOptions`**: 配置全局默认字体，包括字体回退链
-5. **`LogToTrace()`**: 开发阶段调试用，将内部日志输出到调试窗口
-
-### AppBuilder 配置详解
-
-`AppBuilder` 是 Avalonia 的启动配置器，它提供了流畅的 API 来配置应用：
-
-```csharp
-AppBuilder.Configure<App>()
-    // 平台配置
-    .UsePlatformDetect()
-    
-    // 字体配置
-    .With(new FontManagerOptions
-    {
-        DefaultFamilyName = "Inter",
-        FontFallbacks = new[] { new FontFallback { FontFamily = new FontFamily("Arial") } }
-    })
-    
-    // 日志配置
-    .LogToTrace()
-    
-    // 渲染配置
-    .With(new Win32PlatformOptions
-    {
-        RenderingMode = new[] { Win32RenderingMode.AngleEgl, Win32RenderingMode.Wgl }
-    })
-    
-    // X11 配置（Linux）
-    .With(new X11PlatformOptions
-    {
-        RenderingMode = new[] { X11RenderingMode.Glx, X11RenderingMode.Egl }
-    })
-    
-    // macOS 配置
-    .With(new AvaloniaNativePlatformOptions
-    {
-        RenderingMode = new[] { AvaloniaNativeRenderingMode.Metal, AvaloniaNativeRenderingMode.OpenGl }
-    });
+```
+Main(args)
+    ├── CLI 模式？
+    │   └── 是 → ClaudeBootstrapConfigWriter.TryApplyForCurrentUser() → return
+    └── GUI 模式
+        └── BuildAvaloniaApp()
+            └── AppBuilder.Configure<App>()
+                └── UsePlatformDetect()
+                └── FontManagerOptions
+                └── LogToTrace()
+            └── StartWithClassicDesktopLifetime(args)
+                └── App.Initialize()
+                └── App.OnFrameworkInitializationCompleted()
+                └── 事件循环开始
 ```
 
-### 线程模型
+**`[STAThread]` 的含义**：
 
-Avalonia 使用单线程 UI 模型：
+STA（Single-Threaded Apartment）是 Windows COM 线程模型。Avalonia 要求主线程是 STA，因为：
+- UI 操作必须在单线程上执行
+- 避免多线程竞争 UI 资源
+- 与 Windows API 兼容
 
-- **UI 线程**：处理用户输入、布局、渲染
-- **后台线程**：处理数据加载、网络请求等
-- **Dispatcher**：用于在 UI 线程上执行操作
+**`StartWithClassicDesktopLifetime` 的作用**：
 
-```csharp
-// 在 UI 线程上执行操作
-Dispatcher.UIThread.Post(() => {
-    // UI 操作
-});
+这个方法会：
+1. 创建 `IClassicDesktopStyleApplicationLifetime` 实例
+2. 调用 `App.Initialize()` 加载 AXAML
+3. 调用 `App.OnFrameworkInitializationCompleted()` 创建窗口
+4. 进入事件循环（消息泵）
+5. 等待 `Shutdown()` 被调用
+6. 清理资源并退出
 
-// 在 UI 线程上执行操作（异步）
-await Dispatcher.UIThread.InvokeAsync(() => {
-    // UI 操作
-});
-```
-
-## 2.3 Application 生命周期 App.axaml.cs
+### 2.3.3 Application 生命周期
 
 ```csharp
 public partial class App : Application
@@ -194,39 +356,49 @@ public partial class App : Application
     private MainWindowViewModel? _viewModel;
     private MainWindow? _mainWindow;
 
+    // 阶段 1：初始化
     public override void Initialize()
     {
-        // 加载 AXAML 中定义的样式和资源
         AvaloniaXamlLoader.Load(this);
+        // 加载 App.axaml 中定义的样式和资源
+        // 此时还没有窗口，不能创建 UI 元素
     }
 
+    // 阶段 2：框架初始化完成
     public override void OnFrameworkInitializationCompleted()
     {
+        ApplyClaudeBootstrapConfig();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // 1. 判断是否以隐藏模式启动（系统托盘）
-            var startHidden = StartupLaunchOptions.ShouldStartHidden(...);
+            // 判断是否以隐藏模式启动
+            var startHidden = StartupLaunchOptions.ShouldStartHidden(
+                Environment.GetCommandLineArgs().Skip(1));
 
-            // 2. macOS Dock 图标控制
+            // macOS Dock 图标控制
             MacDockIconService.ConfigureForWindowVisibility(!startHidden);
 
-            // 3. 创建 ViewModel（所有业务逻辑的入口）
+            // 创建 ViewModel（所有业务逻辑的入口）
             _viewModel = new MainWindowViewModel();
 
-            // 4. 创建系统托盘控制器
+            // 创建系统托盘控制器
             _trayMenuController = new TrayMenuController(
                 this, desktop, _viewModel, ShowMainWindow, LoadTrayIcon());
 
-            // 5. 显示主窗口（除非以隐藏模式启动）
+            // 显示主窗口（除非以隐藏模式启动）
             if (!startHidden)
                 ShowMainWindow();
 
-            // 6. 注册关闭事件
+            // 注册关闭事件
             desktop.ShutdownRequested += async (_, _) =>
             {
                 _trayMenuController?.Dispose();
+                _trayMenuController = null;
+                CloseMainWindow();
+
                 if (_viewModel is not null)
                     await _viewModel.DisposeAsync();
+                _viewModel = null;
             };
         }
 
@@ -235,7 +407,7 @@ public partial class App : Application
 }
 ```
 
-### 生命周期流程
+**生命周期流程：**
 
 ```
 Main() → AppBuilder.Build() → App.Initialize()
@@ -249,45 +421,240 @@ Main() → AppBuilder.Build() → App.Initialize()
         → [退出]
 ```
 
-### 关键设计决策
+### 2.3.4 窗口管理模式
 
-1. **延迟窗口创建**: `ShowMainWindow()` 按需创建窗口，而非在构造函数中创建。这支持"启动到托盘"功能
-2. **ShutdownMode.OnExplicitShutdown**: 关闭窗口不会退出应用，必须显式调用 Shutdown。这是托盘应用的标准模式
-3. **IAsyncDisposable**: ViewModel 实现异步释放，因为代理服务器需要异步关闭
+CodexSwitch 采用了"延迟窗口创建"模式：
 
-### ApplicationLifetime 类型
+```csharp
+private void ShowMainWindow()
+{
+    if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop ||
+        _viewModel is null)
+    {
+        return;
+    }
+
+    MacDockIconService.ConfigureForWindowVisibility(true);
+
+    var mainWindow = _mainWindow;
+    if (mainWindow is null)
+    {
+        // 延迟创建：首次显示时才创建窗口
+        mainWindow = new MainWindow
+        {
+            DataContext = _viewModel
+        };
+        mainWindow.Closed += OnMainWindowClosed;
+        _mainWindow = mainWindow;
+        desktop.MainWindow = mainWindow;
+    }
+
+    if (!mainWindow.IsVisible)
+        mainWindow.Show();
+
+    if (mainWindow.WindowState == WindowState.Minimized)
+        mainWindow.WindowState = WindowState.Normal;
+
+    mainWindow.Activate();
+}
+
+private void ReleaseMainWindow(MainWindow mainWindow)
+{
+    mainWindow.Closed -= OnMainWindowClosed;
+    mainWindow.DataContext = null;
+
+    if (ReferenceEquals(_mainWindow, mainWindow))
+    {
+        _mainWindow = null;
+        MacDockIconService.ConfigureForWindowVisibility(false);
+        RequestMemoryTrim();
+    }
+
+    if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop &&
+        ReferenceEquals(desktop.MainWindow, mainWindow))
+    {
+        desktop.MainWindow = null;
+    }
+}
+```
+
+**关键设计决策：**
+
+1. **延迟窗口创建**：`ShowMainWindow()` 按需创建窗口，而非在构造函数中创建。这支持"启动到托盘"功能。
+
+2. **窗口关闭不退出应用**：关闭窗口只是隐藏窗口，应用继续在托盘中运行。只有调用 `Shutdown()` 才会退出。
+
+3. **内存管理**：窗口关闭时释放 DataContext 和事件订阅，请求内存回收。
+
+## 2.4 组件详解大全
+
+### 2.4.1 AvaloniaXamlLoader
+
+`AvaloniaXamlLoader` 是 Avalonia 的 XAML 加载器，负责解析 AXAML 文件并构建视觉树。
+
+```csharp
+// 基本用法
+AvaloniaXamlLoader.Load(this);
+
+// 加载指定 URI 的 AXAML
+AvaloniaXamlLoader.Load(this, new Uri("avares://MyApp/Views/MainWindow.axaml"));
+```
+
+**AvaloniaXamlLoader.Load 的作用：**
+
+1. 解析 AXAML 文件
+2. 创建控件实例
+3. 设置属性值
+4. 注册事件处理器
+5. 应用样式和资源
+6. 构建视觉树
+
+### 2.4.2 AssetLoader
+
+`AssetLoader` 用于加载嵌入的 Avalonia 资源：
+
+```csharp
+// 加载资源流
+using var stream = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/favicon.ico"));
+
+// 检查资源是否存在
+bool exists = AssetLoader.Exists(new Uri("avares://CodexSwitch/Assets/logo.png"));
+
+// 获取资源信息
+var info = AssetLoader.GetAsset(new Uri("avares://CodexSwitch/Assets/favicon.ico"));
+```
+
+**注意**：每次调用 `AssetLoader.Open()` 都会返回一个新的 Stream 实例，需要手动释放。
+
+### 2.4.3 ApplicationLifetime
 
 Avalonia 支持多种应用生命周期：
 
-**IClassicDesktopStyleApplicationLifetime**：
-- 桌面应用的标准生命周期
-- 支持多窗口
-- 支持系统托盘
-- 支持关闭请求拦截
+```csharp
+// 桌面应用生命周期
+if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+{
+    desktop.MainWindow = mainWindow;
+    desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+    desktop.ShutdownRequested += (_, _) => { /* 清理 */ };
+}
 
-**ISingleViewApplicationLifetime**：
-- 单视图应用的生命周期
-- 适用于移动平台和 WebAssembly
-- 只有一个主视图
+// 单视图应用生命周期（移动平台、WebAssembly）
+if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
+{
+    singleView.MainView = mainView;
+}
+```
 
-**IClassicDesktopStyleApplicationLifetime 的关键属性**：
-- `MainWindow`：主窗口实例
-- `ShutdownMode`：关闭模式（OnLastWindowClose, OnMainWindowClose, OnExplicitShutdown）
-- `Args`：命令行参数
-- `ExitCode`：退出代码
+**IClassicDesktopStyleApplicationLifetime 的关键属性和方法：**
 
-### 资源加载时机
+| 成员 | 说明 |
+|------|------|
+| `MainWindow` | 主窗口实例 |
+| `ShutdownMode` | 关闭模式 |
+| `Args` | 命令行参数 |
+| `ExitCode` | 退出代码 |
+| `Shutdown(exitCode)` | 请求关闭应用 |
 
-AvaloniaXamlLoader.Load(this) 在 `Initialize()` 中调用，它会：
+**ShutdownMode 枚举：**
 
-1. 解析 App.axaml 文件
-2. 加载所有 StyleInclude
-3. 注册样式和资源
-4. 应用主题
+| 值 | 说明 |
+|---|------|
+| `OnLastWindowClose` | 关闭最后一个窗口时退出（默认） |
+| `OnMainWindowClose` | 关闭主窗口时退出 |
+| `OnExplicitShutdown` | 必须显式调用 Shutdown() 才退出 |
 
-这个过程在 `OnFrameworkInitializationCompleted()` 之前完成，确保所有资源在窗口创建前可用。
+CodexSwitch 使用 `OnExplicitShutdown`，因为关闭窗口不应退出应用（应用在托盘中继续运行）。
 
-## 2.4 Avalonia 资源系统 (avares://)
+## 2.5 CodexSwitch 实战
+
+### 2.5.1 中央包管理
+
+CodexSwitch 使用 `Directory.Packages.props` 实现中央包版本管理：
+
+```xml
+<Project>
+    <PropertyGroup>
+        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageVersion Include="Avalonia" Version="12.0.3" />
+        <PackageVersion Include="Avalonia.Desktop" Version="12.0.3" />
+        <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+        <!-- ... -->
+    </ItemGroup>
+</Project>
+```
+
+**为什么使用中央包管理：**
+
+1. **版本一致性**：确保所有项目使用相同版本的包
+2. **简化更新**：只需修改一个文件即可更新所有项目
+3. **减少冲突**：避免不同项目使用不同版本的包
+4. **安全审计**：更容易审查依赖项
+
+### 2.5.2 Directory.Build.props
+
+CodexSwitch 使用 `Directory.Build.props` 来共享项目配置：
+
+```xml
+<Project>
+    <PropertyGroup>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+</Project>
+```
+
+这个文件会自动应用到所有子项目，避免重复配置。
+
+### 2.5.3 AXAML 编译流程
+
+AXAML 文件在编译时会经历以下流程：
+
+```
+.axaml 文件
+    ↓
+MSBuild 任务 (AvaloniaXamlIlTask)
+    ↓
+XamlX 解析器 (解析 XML → XAML AST)
+    ↓
+类型检查 (验证属性名、类型、绑定路径)
+    ↓
+代码生成 (生成 C# IL 代码)
+    ↓
+编译到程序集 (.dll)
+```
+
+**编译产物：**
+
+对于以下 AXAML：
+```xml
+<Window x:DataType="vm:MainWindowViewModel">
+    <TextBlock Text="{Binding Name}"/>
+</Window>
+```
+
+生成的代码类似：
+```csharp
+public partial class MainWindow : Window
+{
+    public MainWindow()
+    {
+        InitializeComponent();
+    }
+
+    private void InitializeComponent()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
+}
+```
+
+## 2.6 举一反三
+
+### 2.6.1 Avalonia 资源系统 (avares://)
 
 Avalonia 使用自定义 URI 方案访问嵌入资源：
 
@@ -307,16 +674,7 @@ using var stream = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/favicon
 <StyleInclude Source="avares://CodexSwitchUI.ECharts/Themes/UsageTrendChart.axaml"/>
 ```
 
-### `avares://` vs 嵌入资源
-
-| 方式 | URI | 访问方式 |
-|------|-----|----------|
-| AvaloniaResource | `avares://Assembly/Path` | `AssetLoader.Open()` |
-| 嵌入资源 | `resource://Assembly/Path` | `Assembly.GetManifestResourceStream()` |
-
-`AvaloniaResource` 是 Avalonia 推荐的方式，支持 XAML 中的直接引用。
-
-### AvaloniaResource 工作原理
+**AvaloniaResource 工作原理：**
 
 当你在 csproj 中添加：
 ```xml
@@ -335,7 +693,7 @@ Avalonia 的 MSBuild 任务会：
 3. 从程序集中提取资源流
 4. 返回 Stream 对象
 
-### 资源组织最佳实践
+### 2.6.2 资源组织最佳实践
 
 ```
 CodexSwitch/
@@ -361,164 +719,22 @@ CodexSwitch/
         └── SettingsPage.axaml
 ```
 
-### 资源类型
+## 2.7 最佳实践与设计模式
 
-Avalonia 支持多种资源类型：
+### 2.7.1 项目结构最佳实践
 
-**AvaloniaResource**：
-- 嵌入到程序集中的文件
-- 通过 `avares://` URI 访问
-- 支持 XAML 中的直接引用
+1. **使用中央包管理**：通过 `Directory.Packages.props` 统一管理包版本
+2. **共享项目配置**：通过 `Directory.Build.props` 共享通用配置
+3. **启用编译绑定**：设置 `AvaloniaUseCompiledBindingsByDefault=true`
+4. **启用可空检查**：设置 `Nullable=enable`
+5. **合理组织资源**：按类型和功能组织 Assets 目录
 
-**ContentResource**：
-- 作为内容文件复制到输出目录
-- 通过文件路径访问
-- 适用于需要运行时修改的文件
+### 2.7.2 启动流程最佳实践
 
-**None**：
-- 不嵌入，不复制
-- 仅作为项目文件存在
-- 适用于源代码文件
-
-### 资源缓存
-
-Avalonia 会缓存已加载的资源，避免重复加载：
-
-```csharp
-// 第一次加载：从程序集提取
-using var stream1 = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/logo.png"));
-
-// 第二次加载：从缓存返回
-using var stream2 = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/logo.png"));
-```
-
-注意：每次调用 `AssetLoader.Open()` 都会返回一个新的 Stream 实例，需要手动释放。
-
-## 2.5 中央包管理
-
-CodexSwitch 使用 `Directory.Packages.props` 实现中央包版本管理：
-
-```xml
-<Project>
-    <PropertyGroup>
-        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    </PropertyGroup>
-    <ItemGroup>
-        <PackageVersion Include="Avalonia" Version="12.0.3" />
-        <PackageVersion Include="Avalonia.Desktop" Version="12.0.3" />
-        <!-- ... -->
-    </ItemGroup>
-</Project>
-```
-
-这样所有子项目引用包时不需要指定版本号，版本由中央文件统一管理。
-
-### 为什么使用中央包管理
-
-1. **版本一致性**：确保所有项目使用相同版本的包
-2. **简化更新**：只需修改一个文件即可更新所有项目
-3. **减少冲突**：避免不同项目使用不同版本的包
-4. **安全审计**：更容易审查依赖项
-
-### Directory.Build.props
-
-CodexSwitch 使用 `Directory.Build.props` 来共享项目配置：
-
-```xml
-<Project>
-    <PropertyGroup>
-        <LangVersion>latest</LangVersion>
-        <Nullable>enable</Nullable>
-        <ImplicitUsings>enable</ImplicitUsings>
-    </PropertyGroup>
-</Project>
-```
-
-这个文件会自动应用到所有子项目，避免重复配置。
-
-### 项目引用
-
-CodexSwitch 引用了两个 UI 组件库：
-
-```xml
-<ProjectReference Include="..\CodexSwitchUI\src\CodexSwitchUI\CodexSwitchUI.csproj" />
-<ProjectReference Include="..\CodexSwitchUI\src\CodexSwitchUI.ECharts\CodexSwitchUI.ECharts.csproj" />
-```
-
-这些是 Git 子模块，提供了自定义控件和 ECharts 图表集成。
-
-## 2.6 AXAML 编译流程
-
-AXAML 文件在编译时会经历以下流程：
-
-1. **XAML 解析**：将 AXAML 文件解析为 XAML 对象树
-2. **代码生成**：生成 C# 代码（InitializeComponent 方法）
-3. **编译**：将生成的代码编译为 IL
-4. **AOT 编译**（可选）：将 IL 编译为原生代码
-
-### XAML 编译器（XamlCompiler）
-
-Avalonia 的 XAML 编译器会：
-
-1. 解析 AXAML 文件
-2. 验证命名空间和类型
-3. 生成 InitializeComponent 方法
-4. 处理绑定表达式（如果启用编译绑定）
-5. 生成资源加载代码
-
-### 代码生成示例
-
-对于以下 AXAML：
-```xml
-<Window x:DataType="vm:MainWindowViewModel">
-    <TextBlock Text="{Binding Name}"/>
-</Window>
-```
-
-生成的代码类似：
-```csharp
-public partial class MainWindow : Window
-{
-    public MainWindow()
-    {
-        InitializeComponent();
-    }
-
-    private void InitializeComponent()
-    {
-        AvaloniaXamlLoader.Load(this);
-        
-        // 编译绑定代码
-        var textBlock = this.FindControl<TextBlock>("textBlock");
-        textBlock.Bind(TextBlock.TextProperty, 
-            new Binding("Name") { Source = DataContext });
-    }
-}
-```
-
-### 构建错误排查
-
-常见构建错误及解决方案：
-
-**错误：找不到类型**
-```
-Error AXAML: Cannot find type 'MyControl'
-```
-解决方案：检查命名空间声明和程序集引用
-
-**错误：绑定路径无效**
-```
-Error AXAML: Cannot find property 'Name' on type 'MyViewModel'
-```
-解决方案：检查 `x:DataType` 和绑定路径
-
-**错误：资源未找到**
-```
-Error AXAML: Cannot find resource 'MyBrush'
-```
-解决方案：检查资源定义和 `avares://` URI
-
----
+1. **CLI 模式优先**：支持命令行参数直接执行操作，不启动 UI
+2. **延迟窗口创建**：支持"启动到托盘"功能
+3. **正确释放资源**：在 `ShutdownRequested` 中清理所有资源
+4. **异步释放**：使用 `IAsyncDisposable` 处理需要异步关闭的资源
 
 ## Deep Dive
 
@@ -565,42 +781,37 @@ Native AOT 编译会：
 2. **序列化**：需要使用 AOT 兼容的序列化器
 3. **动态加载**：不支持运行时加载程序集
 
-### 项目模板
+### 线程模型
 
-Avalonia 提供了多种项目模板：
+Avalonia 使用单线程 UI 模型：
 
-**avalonia.app**：
-- 基本的 Avalonia 应用
-- 包含 Program.cs、App.axaml、MainWindow.axaml
-- 适合快速开始
+- **UI 线程**：处理用户输入、布局、渲染
+- **后台线程**：处理数据加载、网络请求等
+- **Dispatcher**：用于在 UI 线程上执行操作
 
-**avalonia.mvvm**：
-- MVVM 架构的 Avalonia 应用
-- 包含 ViewModelBase、MainWindowViewModel
-- 适合企业应用
+```csharp
+// 在 UI 线程上执行操作
+Dispatcher.UIThread.Post(() => {
+    // UI 操作
+});
 
-**avalonia.lib**：
-- Avalonia 类库
-- 可以包含自定义控件和样式
-- 适合组件库
+// 在 UI 线程上执行操作（异步）
+await Dispatcher.UIThread.InvokeAsync(() => {
+    // UI 操作
+});
 
-**avalonia.xplat**：
-- 跨平台应用
-- 包含多个平台项目
-- 适合需要平台特定代码的应用
-
----
+// 指定优先级
+Dispatcher.UIThread.Post(() => {
+    // UI 操作
+}, DispatcherPriority.Render);
+```
 
 ## Cross References
 
 - **[第 1 章：Avalonia 概览](01-avalonia-overview.md)** — 了解 Avalonia 的整体架构
 - **[第 3 章：AXAML 基础](03-axaml-fundamentals.md)** — 学习 AXAML 语法和编译
 - **[第 6 章：MVVM 模式](06-mvvm-pattern.md)** — 理解 ViewModel 和服务层
-- **[第 22 章：属性系统](22-property-system.md)** — 深入了解 AvaloniaProperty
-- **[第 24 章：资源系统](24-resource-system.md)** — 理解资源加载和管理
-- **[第 25 章：ASP.NET 集成](25-aspnet-integration.md)** — 了解 CodexSwitch 的代理服务
-
----
+- **[第 7 章：样式与主题](07-styling-theming.md)** — 了解样式系统中的资源引用
 
 ## Common Pitfalls
 
@@ -616,7 +827,7 @@ Avalonia 提供了多种项目模板：
 <OutputType>WinExe</OutputType>
 ```
 
-### 2. AvaloniaResource 路径错误
+### 2. AvaloniaResource 路径大小写错误
 
 **问题**：AvaloniaResource 路径大小写敏感。
 
@@ -662,24 +873,19 @@ public override void Initialize()
 public override void OnFrameworkInitializationCompleted()
 {
     var window = new MainWindow();
-    // ...
 }
 ```
 
-### 5. 忘记释放资源
+### 5. 忘记释放 AssetLoader 流
 
 **问题**：打开 AssetLoader 流后忘记释放。
 
 ```csharp
 // 错误：没有释放流
 var stream = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/logo.png"));
-// 使用 stream...
-// stream 没有被释放
 
 // 正确：使用 using 语句
 using var stream = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/logo.png"));
-// 使用 stream...
-// stream 会在作用域结束时自动释放
 ```
 
 ### 6. 混淆 AvaloniaResource 和 ContentResource
@@ -707,7 +913,86 @@ using var stream = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/logo.pn
 <InvariantGlobalization>false</InvariantGlobalization>
 ```
 
----
+### 8. 在非 UI 线程访问 Application.Current
+
+**问题**：`Application.Current` 只能在 UI 线程访问。
+
+```csharp
+// 错误：在后台线程访问
+Task.Run(() => {
+    var app = Application.Current;  // 可能为 null
+});
+
+// 正确：在 UI 线程访问
+Dispatcher.UIThread.Post(() => {
+    var app = Application.Current;
+});
+```
+
+### 9. 忘记处理 ShutdownRequested
+
+**问题**：没有在 `ShutdownRequested` 中清理资源，导致资源泄漏。
+
+```csharp
+// 错误：没有清理资源
+desktop.ShutdownRequested += (_, _) => { };
+
+// 正确：清理所有资源
+desktop.ShutdownRequested += async (_, _) =>
+{
+    _trayMenuController?.Dispose();
+    if (_viewModel is not null)
+        await _viewModel.DisposeAsync();
+};
+```
+
+### 10. 使用错误的 ShutdownMode
+
+**问题**：关闭窗口时应用意外退出。
+
+```csharp
+// 问题：默认 OnLastWindowClose，关闭窗口就退出
+desktop.ShutdownMode = ShutdownMode.OnLastWindowClose;
+
+// 解决：使用 OnExplicitShutdown，手动控制退出
+desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+```
+
+### 11. 编译绑定缺少 x:DataType
+
+**问题**：启用了全局编译绑定但没有设置 `x:DataType`，导致绑定编译失败。
+
+```xml
+<!-- 错误：缺少 x:DataType -->
+<UserControl>
+    <TextBlock Text="{Binding Name}"/>  <!-- 编译错误 -->
+</UserControl>
+
+<!-- 正确：设置 x:DataType -->
+<UserControl x:DataType="vm:MainWindowViewModel">
+    <TextBlock Text="{Binding Name}"/>
+</UserControl>
+```
+
+### 12. 资源缓存 Stream 泄漏
+
+**问题**：多次调用 `AssetLoader.Open()` 但没有释放之前的 Stream。
+
+```csharp
+// 错误：没有释放之前的流
+for (int i = 0; i < 100; i++)
+{
+    var stream = AssetLoader.Open(new Uri("avares://MyApp/Assets/logo.png"));
+    // 使用 stream，但没有释放
+}
+
+// 正确：使用 using 语句
+for (int i = 0; i < 100; i++)
+{
+    using var stream = AssetLoader.Open(new Uri("avares://MyApp/Assets/logo.png"));
+    // 使用 stream
+}
+```
 
 ## Try It Yourself
 
@@ -739,10 +1024,7 @@ using var stream = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/logo.pn
    find MyTemplateApp -type f | sort
    ```
 
-3. 比较模板项目与 CodexSwitch 的差异：
-   - 项目配置
-   - 文件结构
-   - 代码组织
+3. 比较模板项目与 CodexSwitch 的差异
 
 4. 尝试将模板项目修改为类似 CodexSwitch 的结构
 
@@ -835,12 +1117,16 @@ using var stream = AssetLoader.Open(new Uri("avares://CodexSwitch/Assets/logo.pn
 
 2. 运行构建，观察输出
 
-3. 尝试修改任务，输出更多信息：
-   - 资源文件大小
-   - 资源类型
-   - 嵌入状态
+3. 尝试修改任务，输出更多信息
 
-4. 研究 Avalonia 的 MSBuild 任务源码：
-   ```bash
-   find ~/.nuget/packages/avalonia.build.tasks -name "*.targets"
-   ```
+### 练习 8：实现依赖注入
+
+> **小白提示：什么是依赖注入（DI）？**  依赖注入就像"外卖服务"。你自己不做饭（不自己创建对象），而是告诉外卖平台（DI 容器）你要什么菜（接口），平台帮你找餐厅做好送来（注入实现）。好处是：你不需要知道餐厅在哪里、怎么做菜，你只管说"我要一份宫保鸡丁"。
+>
+> 在代码里，ViewModel 不自己 `new` 一个服务，而是通过构造函数"告诉框架我需要什么服务"，框架自动把服务实例传进来。
+
+1. 安装 `Microsoft.Extensions.DependencyInjection`
+2. 创建一个简单的服务接口和实现
+3. 在 `App.axaml.cs` 中配置 DI 容器
+4. 在 `MainWindowViewModel` 中注入服务
+5. 运行项目验证 DI 工作正常

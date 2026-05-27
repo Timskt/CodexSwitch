@@ -1,102 +1,166 @@
 # 9. 自定义控件开发
 
-CodexSwitch 包含 45+ 自定义控件，从简单的样式包装器到复杂的自定义渲染控件。
+> **写给零基础的你**：Avalonia 自带了很多控件（按钮、文本框、列表等），但有时候你需要一个"世界上还没有"的控件。自定义控件就是自己造一个新的零件。就像乐高积木套装里没有飞机零件，你可以用现有零件拼一个出来，下次直接用。
 
-## 9.1 控件类型层次
+> **UserControl vs TemplatedControl**：这是初学者最容易困惑的地方。简单来说：
+> - **UserControl** = 你直接用现有零件拼一个固定造型（布局写死，适合一次性使用的界面片段）
+> - **TemplatedControl** = 你设计一个新零件的"规格说明书"，别人可以按说明书制造，还能换颜色、换大小（支持模板和样式，适合通用控件）
+
+## 9.1 概述
+
+自定义控件是 Avalonia UI 开发的核心能力之一。学完本章，你将能够：
+
+- 理解 Avalonia 控件类型的完整层次结构，知道何时继承哪个基类
+- 熟练创建样式包装器控件、模板控件和自定义渲染控件
+- 掌握 StyledProperty、PseudoClasses、ControlTemplate 等核心机制
+- 自定义 ItemsControl、ContentControl、Decorator 等高级控件
+- 使用 AdornerLayer 实现浮动装饰层
+- 参考 CodexSwitch 的真实控件代码，理解工业级控件开发模式
+
+CodexSwitch 包含 45+ 自定义控件，从简单的样式包装器（`CsBadge`）到复杂的自定义渲染控件（`CsRollingNumber`），再到带动画的模板控件（`CsSegmentedControl`）。本章将逐一拆解这些控件的设计思路和实现细节。
+
+## 9.2 核心概念
+
+### 9.2.1 控件类型层次
+
+> **小白提示**：这个层次图就像"家族族谱"。`Control` 是老祖宗，所有的控件都是它的后代。每个后代继承了祖先的能力，还添加了自己的新能力。比如 `Button` 继承了 `Control` 的显示能力，还添加了"点击"能力。
 
 ```
-Control                    # 最基础的控件
-├── TemplatedControl       # 支持模板的控件
-│   ├── ContentControl     # 单内容容器
-│   │   ├── Window
-│   │   ├── UserControl
-│   │   └── CsDialog
-│   ├── HeaderedContentControl
-│   ├── ItemsControl       # 集合容器
-│   │   ├── ListBox
-│   │   └── ComboBox
-│   └── RangeBase
-├── InputElement           # 支持输入的控件
-│   ├── Control
-│   │   ├── TextBox
-│   │   └── Button
-│   │       └── CsSegmentedButton
-│   └── ScrollViewer
-└── Visual                 # 可视化基类
+Control                       # 最基础的控件（老祖宗，所有控件的基类）
+├── TemplatedControl          # 支持 ControlTemplate 的控件（可以用"模板"定制外观）
+│   ├── ContentControl        # 单内容容器（只能放一个子控件）
+│   │   ├── Window            # 窗口
+│   │   ├── UserControl       # 用户控件（组合现有控件）
+│   │   └── CsDialog          # 自定义对话框
+│   ├── HeaderedContentControl # 带标题的内容容器
+│   │   ├── TabItem           # 标签页项
+│   │   └── TreeViewItem      # 树节点
+│   ├── ItemsControl          # 集合容器（可以放多个子控件）
+│   │   ├── ListBox           # 列表
+│   │   ├── ComboBox          # 下拉框
+│   │   ├── TabControl        # 标签页
+│   │   ├── TreeView          # 树形控件
+│   │   └── DataGrid          # 数据表格
+│   └── RangeBase             # 范围控件基类（有最小值、最大值、当前值）
+│       ├── Slider            # 滑块
+│       ├── ProgressBar       # 进度条
+│       ├── ScrollBar         # 滚动条
+│       └── NumericUpDown     # 数字输入框
+├── InputElement              # 支持输入事件（鼠标、键盘等）
+│   ├── TextBox               # 文本输入框
+│   └── Button                # 按钮
+│       └── ToggleButton
+│           ├── CheckBox
+│           └── RadioButton
+└── Visual                    # 可视化基类
     └── Layoutable
         └── Control
 ```
 
-## 9.2 样式包装器控件（最简模式）
+### 9.2.2 UserControl vs 自定义控件（TemplatedControl）
 
-大多数 CodexSwitch 控件是"样式包装器"——不添加逻辑，只为样式选择器提供唯一类型名：
+这是初学者最常困惑的问题。两者的核心区别：
+
+**UserControl（用户控件）**
+
+```xml
+<!-- MyWidget.axaml - 布局固定，不可被样式覆盖 -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MyApp.MyWidget">
+    <StackPanel>
+        <TextBlock Text="{Binding Title}"/>
+        <Button Content="Click" Command="{Binding ClickCommand}"/>
+    </StackPanel>
+</UserControl>
+```
 
 ```csharp
-// CsBadge.cs - 仅用于在 AXAML 中写 Style Selector="ui|CsBadge"
-public class CsBadge : ContentControl { }
+public partial class MyWidget : UserControl
+{
+    public MyWidget()
+    {
+        InitializeComponent(); // 加载 AXAML 中定义的视觉树
+    }
+}
+```
 
-// CsCard.cs
-public class CsCard : ContentControl { }
+特点：
+- AXAML 中直接定义视觉树，调用 `InitializeComponent()` 加载
+- 模板固定，消费者无法通过 Style 重新定义外观
+- 适合特定页面的 UI 组合（如设置面板、表单区域）
+- 开发速度快，有设计器支持
 
-// CsSection.cs - 带自定义属性的样式包装器
-public class CsSection : ContentControl
+**TemplatedControl（模板控件）**
+
+```csharp
+// CsCard.cs - 只定义逻辑，外观在 Style 中
+public class CsCard : ContentControl
 {
     public static readonly StyledProperty<string?> TitleProperty =
-        AvaloniaProperty.Register<CsSection, string?>(nameof(Title));
-
-    public static readonly StyledProperty<string?> DescriptionProperty =
-        AvaloniaProperty.Register<CsSection, string?>(nameof(Description));
+        AvaloniaProperty.Register<CsCard, string?>(nameof(Title));
 
     public string? Title
     {
         get => GetValue(TitleProperty);
         set => SetValue(TitleProperty, value);
     }
-
-    public string? Description
-    {
-        get => GetValue(DescriptionProperty);
-        set => SetValue(DescriptionProperty, value);
-    }
 }
 ```
 
-### 为什么需要包装器？
-
-直接对 `ContentControl` 写样式会影响所有 ContentControl。包装器让你精确控制：
-
 ```xml
-<!-- 只影响 CsBadge，不影响其他 ContentControl -->
-<Style Selector="ui|CsBadge">
+<!-- 在 Styles/Components/Card.axaml 中定义外观 -->
+<Style Selector="ui|CsCard">
     <Setter Property="Template">
         <ControlTemplate>
-            <Border Background="{StaticResource CsPrimaryBrush}"
-                    CornerRadius="4"
-                    Padding="6,2">
-                <ContentPresenter/>
+            <Border Background="{TemplateBinding Background}"
+                    CornerRadius="{StaticResource CsRadiusMd}"
+                    Padding="{TemplateBinding Padding}">
+                <StackPanel>
+                    <TextBlock Text="{TemplateBinding Title}"
+                               FontWeight="SemiBold"/>
+                    <ContentPresenter/>
+                </StackPanel>
             </Border>
         </ControlTemplate>
     </Setter>
 </Style>
 ```
 
-## 9.3 StyledProperty 详解
+特点：
+- 逻辑和外观完全分离（Lookless）
+- 外观通过 Style/ControlTemplate 定义，可被覆盖
+- 支持模板部件（PART_*）
+- 适合可复用的控件库
 
-`StyledProperty` 是 Avalonia 的属性系统核心：
+**选择决策表**
+
+| 场景 | 推荐 | 原因 |
+|------|------|------|
+| 页面特定的 UI 组合 | UserControl | 快速开发，布局固定 |
+| 可复用的通用控件 | TemplatedControl | 样式可覆盖，逻辑复用 |
+| 需要多种外观变体 | TemplatedControl | 不同 Style 提供不同外观 |
+| 需要模板部件交互 | TemplatedControl | 支持 PART_* 查找 |
+| 快速原型 | UserControl | 最少代码，即时预览 |
+| 控件库发布 | TemplatedControl | 消费者可自定义外观 |
+
+### 9.2.3 StyledProperty 详解
+
+`StyledProperty` 是 Avalonia 属性系统的核心。每个自定义控件属性都应该通过 `StyledProperty` 注册：
 
 ```csharp
 public sealed class CsSegmentedButton : Button
 {
-    // 1. 注册 StyledProperty
+    // 1. 静态注册 StyledProperty
     public static readonly StyledProperty<bool> IsSelectedProperty =
         AvaloniaProperty.Register<CsSegmentedButton, bool>(nameof(IsSelected));
 
-    // 2. 属性变更处理器（静态构造函数中注册）
+    // 2. 静态构造函数中注册变更处理器
     static CsSegmentedButton()
     {
         IsSelectedProperty.Changed.AddClassHandler<CsSegmentedButton>((button, args) =>
         {
-            // 3. 当属性变更时，更新伪类
+            // 3. 当 IsSelected 变化时，切换伪类
             button.PseudoClasses.Set(":selected", args.NewValue is true);
         });
     }
@@ -110,48 +174,62 @@ public sealed class CsSegmentedButton : Button
 }
 ```
 
-### StyledProperty vs DirectProperty
+**StyledProperty vs DirectProperty**
 
 | 特性 | StyledProperty | DirectProperty |
 |------|---------------|----------------|
-| 样式支持 | 是 | 否 |
-| 继承 | 支持 | 不支持 |
+| 样式支持 | 是（可在 `<Style>` 中设置） | 否 |
+| 继承 | 支持（`Inherits = true`） | 不支持 |
 | 动画 | 支持 | 不支持 |
-| 性能 | 稍慢（走属性系统） | 更快（直接字段访问） |
-| 用途 | UI 可绑定属性 | 内部状态 |
+| 绑定 | 支持 | 支持 |
+| 性能 | 走属性系统，稍慢 | 直接字段访问，更快 |
+| 典型用途 | UI 可绑定属性 | 内部状态、只读计算值 |
 
-### 属性选项
+**属性选项与高级用法**
 
 ```csharp
 // 带默认值
 public static readonly StyledProperty<double> FontSizeProperty =
     AvaloniaProperty.Register<CsRollingNumber, double>(nameof(FontSize), 15d);
 
-// 带验证
+// 带验证器（返回 false 时抛出异常）
 public static readonly StyledProperty<int> MaxItemsProperty =
     AvaloniaProperty.Register<CsMyControl, int>(nameof(MaxItems),
         validate: value => value > 0);
 
-// 带默认值和继承
+// 继承父控件的属性
 public static readonly StyledProperty<FontFamily> FontFamilyProperty =
     TextBlock.FontFamilyProperty.AddOwner<CsMyControl>();
+
+// 直接属性（不经过样式系统）
+public static readonly DirectProperty<CsMyControl, double> ComputedValueProperty =
+    AvaloniaProperty.RegisterDirect<CsMyControl, double>(
+        nameof(ComputedValue),
+        o => o.ComputedValue);
+
+private double _computedValue;
+public double ComputedValue
+{
+    get => _computedValue;
+    private set => SetAndRaise(ComputedValueProperty, ref _computedValue, value);
+}
 ```
 
-## 9.4 AffectsMeasure 与 AffectsRender
+### 9.2.4 AffectsMeasure 与 AffectsRender
 
 告诉属性系统哪些属性变更需要重新测量或重绘：
 
 ```csharp
 static CsRollingNumber()
 {
-    // 这些属性变更时，需要重新测量布局
+    // 这些属性变更时需要重新测量布局（尺寸可能改变）
     AffectsMeasure<CsRollingNumber>(
         ValueProperty,
         UseCompactFormatProperty,
         FontSizeProperty,
         FontWeightProperty);
 
-    // 这些属性变更时，需要重绘（但不需要重新测量）
+    // 这些属性变更时需要重绘（但尺寸不变）
     AffectsRender<CsRollingNumber>(
         ValueProperty,
         UseCompactFormatProperty,
@@ -161,7 +239,236 @@ static CsRollingNumber()
 }
 ```
 
-## 9.5 模板部件 (Template Parts)
+注意：`AffectsMeasure` 已隐含 `AffectsRender`（尺寸变化必然需要重绘），但反之不成立。`Foreground` 只影响颜色，不需要重新测量。
+
+### 9.2.5 PseudoClasses（伪类）
+
+伪类让你在 AXAML 中用 `:pseudo-class` 语法选择控件状态：
+
+```csharp
+[PseudoClasses(":selected", ":dragging", ":expanded")]
+public class CsSegmentedButton : Button
+{
+    public static readonly StyledProperty<bool> IsSelectedProperty =
+        AvaloniaProperty.Register<CsSegmentedButton, bool>(nameof(IsSelected));
+
+    static CsSegmentedButton()
+    {
+        IsSelectedProperty.Changed.AddClassHandler<CsSegmentedButton>((button, args) =>
+        {
+            button.PseudoClasses.Set(":selected", args.NewValue is true);
+        });
+    }
+}
+```
+
+在样式中使用：
+
+```xml
+<!-- 选中状态 -->
+<Style Selector="ui|CsSegmentedButton:selected">
+    <Setter Property="Foreground" Value="{StaticResource CsForegroundBrush}"/>
+</Style>
+
+<!-- 选中且悬停 -->
+<Style Selector="ui|CsSegmentedButton:selected:pointerover">
+    <Setter Property="Foreground" Value="{StaticResource CsForegroundBrush}"/>
+</Style>
+```
+
+**Avalonia 内置伪类**
+
+| 伪类 | 说明 | 适用控件 |
+|------|------|---------|
+| `:pointerover` | 鼠标悬停 | 所有控件 |
+| `:pressed` | 按下 | Button、ToggleButton |
+| `:focus` | 聚焦 | 所有可聚焦控件 |
+| `:focus-visible` | 键盘聚焦可见 | 所有可聚焦控件 |
+| `:disabled` | 禁用（`IsEnabled=false`） | 所有控件 |
+| `:checked` | 选中 | CheckBox、ToggleButton |
+| `:selected` | 选中 | ListBoxItem、自定义 |
+| `:expanded` | 展开 | TreeViewItem、ComboBox |
+| `:empty` | 无子元素 | ItemsControl |
+| `:indeterminate` | 不确定状态 | CheckBox（三态） |
+
+## 9.3 进阶用法
+
+### 9.3.1 ControlTemplate 深入
+
+ControlTemplate 是 TemplatedControl 的外观定义。理解 ControlTemplate 的每个元素至关重要：
+
+**TemplateBinding**
+
+`TemplateBinding` 将模板内的属性绑定到控件自身的属性：
+
+```xml
+<ControlTemplate>
+    <Border Background="{TemplateBinding Background}"
+            BorderBrush="{TemplateBinding BorderBrush}"
+            BorderThickness="{TemplateBinding BorderThickness}"
+            CornerRadius="{TemplateBinding CornerRadius}"
+            Padding="{TemplateBinding Padding}">
+        <ContentPresenter/>
+    </Border>
+</ControlTemplate>
+```
+
+`TemplateBinding` 是单向的（控件属性 -> 模板元素），且只支持 StyledProperty。如果需要更复杂的绑定（如转换器、多级路径），使用 `{Binding RelativeSource={RelativeSource TemplatedParent}, Path=...}`。
+
+**ContentPresenter**
+
+`ContentPresenter` 是 `ContentControl` 模板中必须的元素，它负责显示 `Content` 属性的内容，并应用 `ContentTemplate`：
+
+```xml
+<ControlTemplate>
+    <Border>
+        <ContentPresenter Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                          Margin="{TemplateBinding Padding}"/>
+    </Border>
+</ControlTemplate>
+```
+
+**ItemsPresenter**
+
+`ItemsPresenter` 是 `ItemsControl` 模板中必须的元素，它负责显示所有子项：
+
+```xml
+<!-- ListBox 的 ControlTemplate -->
+<ControlTemplate>
+    <Border Background="{TemplateBinding Background}"
+            BorderBrush="{TemplateBinding BorderBrush}">
+        <ScrollViewer>
+            <ItemsPresenter Items="{TemplateBinding Items}"
+                            ItemTemplate="{TemplateBinding ItemTemplate}">
+                <ItemsPresenter.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsPresenter.ItemsPanel>
+            </ItemsPresenter>
+        </ScrollViewer>
+    </Border>
+</ControlTemplate>
+```
+
+### 9.3.2 PART_ 命名约定
+
+Avalonia 的内置控件使用 `PART_` 前缀命名模板部件。了解这些约定有助于自定义内置控件模板：
+
+**Slider 的模板部件**
+
+```xml
+<ControlTemplate TargetType="Slider">
+    <Grid>
+        <!-- PART_Track：滑动轨道容器 -->
+        <Border x:Name="PART_Track" Height="4">
+            <Border.Background>
+                <SolidColorBrush Color="Gray"/>
+            </Border.Background>
+        </Border>
+
+        <!-- PART_SelectionRange：选中范围指示 -->
+        <Border x:Name="PART_SelectionRange" Height="4"/>
+
+        <!-- PART_DecreaseButton：减少按钮（轨道左侧） -->
+        <RepeatButton x:Name="PART_DecreaseButton"
+                      Classes="slider-track"/>
+
+        <!-- PART_IncreaseButton：增加按钮（轨道右侧） -->
+        <RepeatButton x:Name="PART_IncreaseButton"
+                      Classes="slider-track"/>
+
+        <!-- PART_Thumb：拖拽滑块 -->
+        <Thumb x:Name="PART_Thumb">
+            <Thumb.Template>
+                <ControlTemplate>
+                    <Ellipse Width="16" Height="16"
+                             Fill="{StaticResource CsPrimaryBrush}"/>
+                </ControlTemplate>
+            </Thumb.Template>
+        </Thumb>
+    </Grid>
+</ControlTemplate>
+```
+
+**ProgressBar 的模板部件**
+
+```xml
+<ControlTemplate TargetType="ProgressBar">
+    <Border x:Name="PART_Track"
+            Background="{TemplateBinding Background}"
+            CornerRadius="4">
+        <Border x:Name="PART_Indicator"
+                Background="{TemplateBinding Foreground}"
+                HorizontalAlignment="Left"
+                CornerRadius="4"/>
+    </Border>
+</ControlTemplate>
+```
+
+**TabControl 的模板部件**
+
+```xml
+<ControlTemplate TargetType="TabControl">
+    <DockPanel>
+        <!-- PART_HeaderPanel：标签头区域 -->
+        <TabStrip x:Name="PART_HeaderPanel"
+                  DockPanel.Dock="Top"
+                  Items="{TemplateBinding Items}"
+                  SelectedIndex="{TemplateBinding SelectedIndex}"/>
+
+        <!-- PART_SelectedContentHost：选中项的内容区域 -->
+        <ContentPresenter x:Name="PART_SelectedContentHost"
+                          Content="{TemplateBinding SelectedContent}"
+                          ContentTemplate="{TemplateBinding SelectedContentTemplate}"/>
+    </DockPanel>
+</ControlTemplate>
+```
+
+**TreeView 的模板部件**
+
+```xml
+<ControlTemplate TargetType="TreeView">
+    <Border Background="{TemplateBinding Background}">
+        <ScrollViewer>
+            <ItemsPresenter x:Name="PART_ItemsPresenter"
+                            Items="{TemplateBinding Items}">
+                <ItemsPresenter.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsPresenter.ItemsPanel>
+            </ItemsPresenter>
+        </ScrollViewer>
+    </Border>
+</ControlTemplate>
+```
+
+### 9.3.3 StyleKeyOverride
+
+当控件需要复用另一个控件的样式时：
+
+```csharp
+// CsInput 继承 TextBox，但用 "TextBox" 的样式
+public class CsInput : TextBox
+{
+    // Style Selector="TextBox" 也会匹配 CsInput
+    protected override Type StyleKeyOverride => typeof(TextBox);
+}
+
+// CsSwitch 继承 CheckBox
+public class CsSwitch : CheckBox
+{
+    protected override Type StyleKeyOverride => typeof(CheckBox);
+}
+```
+
+这让你可以为 `TextBox` 写通用样式，`CsInput` 自动继承，同时保留 `CsInput` 自己的类型选择器（`ui|CsInput`）。
+
+### 9.3.4 OnApplyTemplate 与模板部件
 
 当控件需要从模板中查找特定元素时使用 `OnApplyTemplate`：
 
@@ -187,581 +494,544 @@ public class CsSegmentedControl : ContentControl
 ```
 
 对应的 AXAML 模板：
+
 ```xml
 <ControlTemplate>
-    <Grid x:Name="PART_SelectionLayer">     <!-- 在代码中查找 -->
-        <Border x:Name="PART_SelectedPill"> <!-- 在代码中查找 -->
-            <Border.RenderTransform>
-                <TranslateTransform/>
-            </Border.RenderTransform>
-        </Border>
-        <ContentPresenter/>
-    </Grid>
+    <Border Background="{StaticResource CsSegmentedBrush}"
+            ClipToBounds="True"
+            Padding="{TemplateBinding Padding}">
+        <Grid x:Name="PART_SelectionLayer" ClipToBounds="True">
+            <Border x:Name="PART_SelectedPill"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    IsHitTestVisible="False"
+                    Opacity="0"
+                    Background="{StaticResource CsSegmentedPillBrush}">
+                <Border.RenderTransform>
+                    <TranslateTransform/>
+                </Border.RenderTransform>
+            </Border>
+            <ContentPresenter Content="{TemplateBinding Content}"/>
+        </Grid>
+    </Border>
 </ControlTemplate>
 ```
 
-## 9.6 PseudoClasses（伪类）
+### 9.3.5 自定义 ItemsControl
 
-伪类让你在 AXAML 中用 `:pseudo-class` 语法选择控件状态：
+自定义 `ItemsControl` 需要理解 `ItemContainerGenerator`：
 
 ```csharp
-[PseudoClasses(":selected", ":dragging", ":expanded")]
-public class CsSegmentedButton : Button
+public class CsTagList : ItemsControl
 {
-    public static readonly StyledProperty<bool> IsSelectedProperty =
-        AvaloniaProperty.Register<CsSegmentedButton, bool>(nameof(IsSelected));
+    // 自定义容器类型
+    protected override Type StyleKeyOverride => typeof(ItemsControl);
 
-    static CsSegmentedButton()
+    // 创建或配置项容器
+    protected override void PrepareContainerForItemOverride(Control container, object? item, int index)
     {
-        IsSelectedProperty.Changed.AddClassHandler<CsSegmentedButton>((button, args) =>
+        base.PrepareContainerForItemOverride(container, item, index);
+
+        if (container is CsTag tag && item is string text)
         {
-            button.PseudoClasses.Set(":selected", args.NewValue is true);
-        });
-    }
-}
-```
-
-在样式中使用：
-```xml
-<!-- 选中状态 -->
-<Style Selector="ui|CsSegmentedButton:selected">
-    <Setter Property="Foreground" Value="{StaticResource CsForegroundBrush}"/>
-</Style>
-
-<!-- 选中且悬停 -->
-<Style Selector="ui|CsSegmentedButton:selected:pointerover">
-    <Setter Property="Foreground" Value="{StaticResource CsForegroundBrush}"/>
-</Style>
-```
-
-### 内置伪类
-
-| 伪类 | 说明 |
-|------|------|
-| `:pointerover` | 鼠标悬停 |
-| `:pressed` | 按下 |
-| `:focus` | 聚焦 |
-| `:focus-visible` | 键盘聚焦可见 |
-| `:disabled` | 禁用 |
-| `:checked` | 选中（CheckBox） |
-| `:selected` | 选中（自定义） |
-
-## 9.7 StyleKeyOverride
-
-当控件需要复用另一个控件的样式时：
-
-```csharp
-// CsInput 继承 TextBox，但用 "TextBox" 的样式
-public class CsInput : TextBox
-{
-    // 这样 Style Selector="TextBox" 也会匹配 CsInput
-    protected override Type StyleKeyOverride => typeof(TextBox);
-}
-
-// CsSwitch 继承 CheckBox
-public class CsSwitch : CheckBox
-{
-    protected override Type StyleKeyOverride => typeof(CheckBox);
-}
-```
-
-这让你可以为 `TextBox` 写通用样式，`CsInput` 自动继承。
-
-## 9.8 自定义视觉树遍历
-
-CodexSwitch 大量使用视觉树遍历来查找特定控件：
-
-```csharp
-// 向下查找所有后代
-var buttons = this.GetVisualDescendants()
-    .OfType<CsSegmentedButton>()
-    .ToList();
-
-// 向上查找祖先
-Control? FindProviderRow(Control source)
-{
-    if (source.Classes.Contains("provider-list-row"))
-        return source;
-
-    return source.GetVisualAncestors()
-        .OfType<Control>()
-        .FirstOrDefault(control => control.Classes.Contains("provider-list-row"));
-}
-
-// 坐标转换
-var topLeft = selected.TranslatePoint(new Point(0, 0), _selectionLayer);
-```
-
-### 常用遍历方法
-
-| 方法 | 方向 | 返回 |
-|------|------|------|
-| `GetVisualChildren()` | 直接子元素 | `IEnumerable<Visual>` |
-| `GetVisualDescendants()` | 所有后代 | `IEnumerable<Visual>` |
-| `GetVisualAncestors()` | 所有祖先 | `IEnumerable<Visual>` |
-| `GetVisualParent()` | 直接父元素 | `Visual?` |
-| `GetLogicalDescendants()` | 逻辑后代 | `IEnumerable<ILogical>` |
-
-## 9.9 深入：控件生命周期详解
-
-### 完整生命周期
-
-Avalonia 控件的生命周期分为几个关键阶段：
-
-```
-构造函数
-    ↓
-属性初始化（默认值）
-    ↓
-添加到可视化树（OnAttachedToVisualTree）
-    ↓
-首次测量（MeasureOverride）
-    ↓
-首次排列（ArrangeOverride）
-    ↓
-模板应用（OnApplyTemplate）
-    ↓
-首次渲染（Render）
-    ↓
-... 运行期间循环测量/排列/渲染 ...
-    ↓
-从可视化树移除（OnDetachedFromVisualTree）
-    ↓
-销毁（Dispose，如果实现了 IDisposable）
-```
-
-### 各阶段详解
-
-**1. 构造函数**
-
-```csharp
-public class CsRollingNumber : Control
-{
-    public CsRollingNumber()
-    {
-        // 设置默认属性值
-        ClipToBounds = true;
-
-        // 注意：不要在这里访问模板部件
-        // 模板还没有应用
-    }
-}
-```
-
-**2. OnAttachedToVisualTree**
-
-```csharp
-protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
-{
-    base.OnAttachedToVisualTree(e);
-
-    // 此时控件已经添加到可视化树
-    // 可以安全地访问 Parent、VisualRoot 等
-    _isAttached = true;
-
-    // 启动动画、订阅事件等
-    if (!_hasValue)
-        SetImmediateValue(Value);
-}
-```
-
-**3. OnApplyTemplate**
-
-```csharp
-protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
-{
-    base.OnApplyTemplate(e);
-
-    // 此时模板已经应用，可以查找模板部件
-    _selectedPill = e.NameScope.Find<Border>("PART_SelectedPill");
-    _selectionLayer = e.NameScope.Find<Control>("PART_SelectionLayer");
-
-    // 使用 Dispatcher.UIThread.Post 确保在布局完成后执行
-    Dispatcher.UIThread.Post(() => UpdateSelectionPill(animate: false), DispatcherPriority.Loaded);
-}
-```
-
-**4. MeasureOverride 和 ArrangeOverride**
-
-```csharp
-protected override Size MeasureOverride(Size availableSize)
-{
-    // 测量逻辑：计算控件需要的尺寸
-    var text = FormatValue(Value, UseCompactFormat);
-    var layout = CreateTextLayout(text);
-    return new Size(Math.Ceiling(layout.Width), Math.Ceiling(layout.Height));
-}
-
-protected override Size ArrangeOverride(Size finalSize)
-{
-    // 排列逻辑：在给定的尺寸内排列子元素
-    // 通常调用 base.ArrangeOverride(finalSize)
-    return base.ArrangeOverride(finalSize);
-}
-```
-
-**5. OnDetachedFromVisualTree**
-
-```csharp
-protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
-{
-    base.OnDetachedFromVisualTree(e);
-
-    // 清理资源
-    _isAttached = false;
-    StopAnimation();  // 必须停止定时器
-
-    // 取消事件订阅
-    foreach (var button in _trackedButtons)
-        button.PropertyChanged -= OnSegmentedButtonPropertyChanged;
-    _trackedButtons.Clear();
-}
-```
-
-### 生命周期顺序验证
-
-```csharp
-public class LifecycleTestControl : Control
-{
-    public LifecycleTestControl()
-    {
-        Debug.WriteLine("1. Constructor");
-    }
-
-    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        base.OnAttachedToVisualTree(e);
-        Debug.WriteLine("2. OnAttachedToVisualTree");
-    }
-
-    protected override Size MeasureOverride(Size availableSize)
-    {
-        Debug.WriteLine("3. MeasureOverride");
-        return base.MeasureOverride(availableSize);
-    }
-
-    protected override Size ArrangeOverride(Size finalSize)
-    {
-        Debug.WriteLine("4. ArrangeOverride");
-        return base.ArrangeOverride(finalSize);
-    }
-
-    protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
-    {
-        base.OnApplyTemplate(e);
-        Debug.WriteLine("5. OnApplyTemplate");
-    }
-
-    public override void Render(DrawingContext context)
-    {
-        Debug.WriteLine("6. Render");
-        base.Render(context);
-    }
-
-    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        base.OnDetachedFromVisualTree(e);
-        Debug.WriteLine("7. OnDetachedFromVisualTree");
-    }
-}
-```
-
-## 9.10 深入：自定义测量与排列
-
-### MeasureOverride 详解
-
-`MeasureOverride` 负责计算控件的期望尺寸：
-
-```csharp
-protected override Size MeasureOverride(Size availableSize)
-{
-    // availableSize 是父控件提供的可用空间
-    // 可能是无限大（double.PositiveInfinity）
-
-    // 1. 测量子元素
-    double totalWidth = 0;
-    double totalHeight = 0;
-
-    foreach (var child in GetVisualChildren().OfType<Control>())
-    {
-        child.Measure(availableSize);
-        totalWidth = Math.Max(totalWidth, child.DesiredSize.Width);
-        totalHeight += child.DesiredSize.Height;
-    }
-
-    // 2. 添加内边距
-    totalWidth += Padding.Left + Padding.Right;
-    totalHeight += Padding.Top + Padding.Bottom;
-
-    // 3. 返回期望尺寸
-    return new Size(totalWidth, totalHeight);
-}
-```
-
-### ArrangeOverride 详解
-
-`ArrangeOverride` 负责在给定尺寸内排列子元素：
-
-```csharp
-protected override Size ArrangeOverride(Size finalSize)
-{
-    // finalSize 是父控件分配的实际空间
-
-    double y = Padding.Top;
-    double availableWidth = finalSize.Width - Padding.Left - Padding.Right;
-
-    foreach (var child in GetVisualChildren().OfType<Control>())
-    {
-        var childHeight = child.DesiredSize.Height;
-        child.Arrange(new Rect(Padding.Left, y, availableWidth, childHeight));
-        y += childHeight;
-    }
-
-    return finalSize;
-}
-```
-
-### 自定义面板示例
-
-```csharp
-public class WrapPanel : Panel
-{
-    public static readonly StyledProperty<double> SpacingProperty =
-        AvaloniaProperty.Register<WrapPanel, double>(nameof(Spacing));
-
-    protected override Size MeasureOverride(Size availableSize)
-    {
-        double lineWidth = 0;
-        double lineHeight = 0;
-        double totalHeight = 0;
-        double maxWidth = 0;
-
-        foreach (var child in Children)
-        {
-            child.Measure(availableSize);
-
-            if (lineWidth + child.DesiredSize.Width > availableSize.Width)
-            {
-                // 换行
-                maxWidth = Math.Max(maxWidth, lineWidth);
-                totalHeight += lineHeight + Spacing;
-                lineWidth = child.DesiredSize.Width;
-                lineHeight = child.DesiredSize.Height;
-            }
-            else
-            {
-                lineWidth += child.DesiredSize.Width + Spacing;
-                lineHeight = Math.Max(lineHeight, child.DesiredSize.Height);
-            }
+            tag.Content = text;
+            tag.Classes.Add("auto-generated");
         }
-
-        maxWidth = Math.Max(maxWidth, lineWidth);
-        totalHeight += lineHeight;
-
-        return new Size(maxWidth, totalHeight);
     }
 
-    protected override Size ArrangeOverride(Size finalSize)
+    // 清理容器
+    protected override void ClearContainerForItemOverride(Control container, object? item, int index)
     {
-        double x = 0;
-        double y = 0;
-        double lineHeight = 0;
+        base.ClearContainerForItemOverride(container, item, index);
+        container.Classes.Remove("auto-generated");
+    }
 
-        foreach (var child in Children)
-        {
-            if (x + child.DesiredSize.Width > finalSize.Width)
-            {
-                x = 0;
-                y += lineHeight + Spacing;
-                lineHeight = 0;
-            }
+    // 判断是否是自己的容器（用于虚拟化）
+    protected override bool NeedsContainerOverride(object? item, int index, out object? recycleKey)
+    {
+        return NeedsContainer<CsTag>(item, out recycleKey);
+    }
 
-            child.Arrange(new Rect(x, y, child.DesiredSize.Width, child.DesiredSize.Height));
-            x += child.DesiredSize.Width + Spacing;
-            lineHeight = Math.Max(lineHeight, child.DesiredSize.Height);
-        }
-
-        return finalSize;
+    // 创建默认容器
+    protected override Control CreateContainerForItemOverride(object? item, int index, object? recycleKey)
+    {
+        return new CsTag();
     }
 }
 ```
 
-## 9.11 深入：自定义命中测试
+### 9.3.6 自定义 ContentControl
 
-### 命中测试原理
-
-当用户点击控件时，Avalonia 通过命中测试确定被点击的元素：
-
-```
-用户点击坐标 (x, y)
-    ↓
-从根元素开始，递归检查每个控件
-    ↓
-检查点是否在控件的边界内
-    ↓
-检查控件是否可命中测试（IsHitTestVisible）
-    ↓
-检查控件的命中测试几何形状
-    ↓
-返回最具体的命中元素
-```
-
-### 自定义命中测试几何形状
-
-默认情况下，命中测试使用控件的边界矩形。对于不规则形状，可以自定义：
+自定义 `ContentControl` 常用于需要额外属性的容器：
 
 ```csharp
-public class CircleControl : Control
-{
-    public override bool HitTest(Point point)
-    {
-        // 计算点到圆心的距离
-        var center = new Point(Bounds.Width / 2, Bounds.Height / 2);
-        var radius = Math.Min(Bounds.Width, Bounds.Height) / 2;
-        var distance = Math.Sqrt(
-            Math.Pow(point.X - center.X, 2) +
-            Math.Pow(point.Y - center.Y, 2));
-
-        // 只有在圆内才算命中
-        return distance <= radius;
-    }
-
-    protected override Geometry? CreateHitTestGeometry()
-    {
-        // 创建圆形几何形状用于命中测试
-        var center = new Point(Bounds.Width / 2, Bounds.Height / 2);
-        var radius = Math.Min(Bounds.Width, Bounds.Height) / 2;
-        return new EllipseGeometry(new Rect(
-            center.X - radius, center.Y - radius,
-            radius * 2, radius * 2));
-    }
-}
-```
-
-### 命中测试与事件冒泡
-
-```csharp
-public class CustomControl : Control
-{
-    protected override void OnPointerPressed(PointerPressedEventArgs e)
-    {
-        // 检查点击位置是否在特定区域
-        var point = e.GetPosition(this);
-        if (IsInSpecialArea(point))
-        {
-            // 处理特殊区域的点击
-            HandleSpecialClick(point);
-            e.Handled = true;  // 阻止事件继续冒泡
-            return;
-        }
-
-        // 默认处理
-        base.OnPointerPressed(e);
-    }
-
-    private bool IsInSpecialArea(Point point)
-    {
-        // 自定义区域检测逻辑
-        return point.X < 50 && point.Y < 50;
-    }
-}
-```
-
-## 9.12 深入：控件模板 vs 用户控件
-
-### 控件模板（TemplatedControl）
-
-```csharp
-// 定义控件模板
 public class CsCard : ContentControl
 {
-    // 模板在样式中定义
-    // 通过 Style Selector="ui|CsCard" 设置 Template
-}
+    public static readonly StyledProperty<string?> TitleProperty =
+        AvaloniaProperty.Register<CsCard, string?>(nameof(Title));
 
-// 在样式中定义模板
+    public static readonly StyledProperty<string?> DescriptionProperty =
+        AvaloniaProperty.Register<CsCard, string?>(nameof(Description));
+
+    public static readonly StyledProperty<object?> IconProperty =
+        AvaloniaProperty.Register<CsCard, object?>(nameof(Icon));
+
+    public string? Title
+    {
+        get => GetValue(TitleProperty);
+        set => SetValue(TitleProperty, value);
+    }
+
+    public string? Description
+    {
+        get => GetValue(DescriptionProperty);
+        set => SetValue(DescriptionProperty, value);
+    }
+
+    public object? Icon
+    {
+        get => GetValue(IconProperty);
+        set => SetValue(IconProperty, value);
+    }
+}
+```
+
+模板中使用 `TemplateBinding` 暴露这些属性：
+
+```xml
 <Style Selector="ui|CsCard">
     <Setter Property="Template">
         <ControlTemplate>
             <Border Background="{TemplateBinding Background}"
                     CornerRadius="{StaticResource CsRadiusMd}"
                     Padding="{TemplateBinding Padding}">
-                <ContentPresenter/>
+                <StackPanel Spacing="8">
+                    <!-- 图标 + 标题行 -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ContentPresenter Content="{TemplateBinding Icon}"/>
+                        <TextBlock Text="{TemplateBinding Title}"
+                                   FontWeight="SemiBold"
+                                   FontSize="14"/>
+                    </StackPanel>
+                    <!-- 描述 -->
+                    <TextBlock Text="{TemplateBinding Description}"
+                               Opacity="0.7"
+                               FontSize="12"/>
+                    <!-- 主内容 -->
+                    <ContentPresenter Content="{TemplateBinding Content}"/>
+                </StackPanel>
             </Border>
         </ControlTemplate>
     </Setter>
 </Style>
 ```
 
-特点：
-- 模板与逻辑分离
-- 可以通过样式重新定义模板
-- 支持模板部件（PART_*）
-- 适合可复用的控件库
+### 9.3.7 装饰器（Decorator）模式
 
-### 用户控件（UserControl）
-
-```xml
-<!-- MyUserControl.axaml -->
-<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="MyApp.MyUserControl">
-    <StackPanel>
-        <TextBlock Text="{Binding Title}"/>
-        <Button Content="Click Me" Command="{Binding ClickCommand}"/>
-    </StackPanel>
-</UserControl>
-```
+Decorator 是一种包装子元素并添加额外视觉效果的控件：
 
 ```csharp
-// MyUserControl.axaml.cs
-public partial class MyUserControl : UserControl
+public class CsGlowBorder : Decorator
 {
-    public MyUserControl()
+    public static readonly StyledProperty<IBrush?> GlowBrushProperty =
+        AvaloniaProperty.Register<CsGlowBorder, IBrush?>(nameof(GlowBrush));
+
+    public static readonly StyledProperty<double> GlowSizeProperty =
+        AvaloniaProperty.Register<CsGlowBorder, double>(nameof(GlowSize), 10d);
+
+    public IBrush? GlowBrush
     {
-        InitializeComponent();
+        get => GetValue(GlowBrushProperty);
+        set => SetValue(GlowBrushProperty, value);
+    }
+
+    public double GlowSize
+    {
+        get => GetValue(GlowSizeProperty);
+        set => SetValue(GlowSizeProperty, value);
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        // 测量子元素时减去发光区域的空间
+        var margin = GlowSize;
+        var childAvailable = new Size(
+            Math.Max(0, availableSize.Width - margin * 2),
+            Math.Max(0, availableSize.Height - margin * 2));
+
+        Child?.Measure(childAvailable);
+        var desired = Child?.DesiredSize ?? default;
+
+        return new Size(desired.Width + margin * 2, desired.Height + margin * 2);
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        var margin = GlowSize;
+        Child?.Arrange(new Rect(margin, margin,
+            Math.Max(0, finalSize.Width - margin * 2),
+            Math.Max(0, finalSize.Height - margin * 2)));
+        return finalSize;
+    }
+
+    public override void Render(DrawingContext context)
+    {
+        if (GlowBrush is null) return;
+
+        var glowRect = new Rect(GlowSize / 2, GlowSize / 2,
+            Bounds.Width - GlowSize, Bounds.Height - GlowSize);
+
+        // 绘制发光效果（使用 BoxShadow 或自定义绘制）
+        context.DrawRectangle(null,
+            new Pen(GlowBrush, GlowSize / 2),
+            glowRect, 4, 4);
+
+        base.Render(context);
     }
 }
 ```
 
-特点：
-- 视图和代码后置文件
-- 模板固定，不能通过样式重新定义
-- 适合特定场景的 UI 组合
-- 更接近 WPF 的 UserControl
+使用方式：
 
-### 何时使用哪种
+```xml
+<ui:CsGlow GlowBrush="#404A9EFF" GlowSize="8">
+    <Border Background="White" CornerRadius="8" Padding="16">
+        <TextBlock Text="I have a glow effect!"/>
+    </Border>
+</ui:CsGlow>
+```
 
-| 场景 | 推荐使用 |
-|------|---------|
-| 可复用的控件库 | TemplatedControl |
-| 需要样式定制 | TemplatedControl |
-| 特定页面的 UI 组合 | UserControl |
-| 快速原型开发 | UserControl |
-| 需要模板部件 | TemplatedControl |
-| 不需要样式定制 | UserControl |
+### 9.3.8 AdornerLayer
 
-## 9.13 深入：Lookless 控件设计
-
-### 什么是 Lookless 控件
-
-Lookless（无外观）控件是将逻辑与外观完全分离的控件：
-
-- **逻辑**：在 C# 代码中定义（属性、命令、事件）
-- **外观**：在 AXAML 样式中定义（模板、动画、视觉效果）
+`AdornerLayer` 是一个覆盖在控件上方的透明层，用于绘制装饰效果（如拖拽手柄、调整大小手柄、验证错误指示器）：
 
 ```csharp
-// Lookless 控件：只定义逻辑
-public class CsSegmentedButton : Button
+public class ResizeAdorner : Adorner
 {
-    // 属性定义
+    private Thumb? _bottomRightThumb;
+
+    public ResizeAdorner(Control adornedElement) : base(adornedElement)
+    {
+    }
+
+    protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
+    {
+        base.OnApplyTemplate(e);
+        _bottomRightThumb = e.NameScope.Find<Thumb>("PART_BottomRightThumb");
+
+        if (_bottomRightThumb is not null)
+        {
+            _bottomRightThumb.DragDelta += OnDragDelta;
+        }
+    }
+
+    private void OnDragDelta(object? sender, VectorEventArgs e)
+    {
+        if (AdornedElement is Control control)
+        {
+            var newWidth = Math.Max(50, control.Width + e.Vector.X);
+            var newHeight = Math.Max(50, control.Height + e.Vector.Y);
+            control.Width = newWidth;
+            control.Height = newHeight;
+        }
+    }
+
+    // 覆盖排列，让 Adorner 与被装饰元素对齐
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        var adornedSize = AdornedElement.DesiredSize;
+        return base.ArrangeOverride(adornedSize);
+    }
+}
+
+// 在代码中添加 Adorner
+var adornerLayer = AdornerLayer.GetAdornerLayer(myControl);
+if (adornerLayer is not null)
+{
+    var adorner = new ResizeAdorner(myControl);
+    adornerLayer.Children.Add(adorner);
+}
+
+// 移除 Adorner
+adornerLayer.Children.Remove(adorner);
+```
+
+**Adorner 的 AXAML 方式**
+
+```xml
+<AdornerDecorator>
+    <Border x:Name="MyBorder" Width="200" Height="100">
+        <TextBlock Text="Drag to resize"/>
+    </Border>
+    <AdornerLayer.Adorners>
+        <local:ResizeAdorner Adorned="{Binding #MyBorder}"/>
+    </AdornerLayer.Adorners>
+</AdornerDecorator>
+```
+
+## 9.4 组件详解大全
+
+### 9.4.1 ToggleSwitch 详解
+
+`ToggleSwitch` 是一个开关控件，比 `CheckBox` 更适合表示开/关状态：
+
+```xml
+<ToggleSwitch IsChecked="{Binding IsDarkMode}"
+              OnContent="Dark"
+              OffContent="Light"/>
+```
+
+**核心属性**
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `IsChecked` | `bool?` | 是否选中（三态） |
+| `OnContent` | `object?` | 开启时显示的内容 |
+| `OffContent` | `object?` | 关闭时显示的内容 |
+| `Content` | `object?` | 开关旁边的文字（与 OnContent/OffContent 互斥） |
+
+**自定义模板**
+
+```xml
+<Style Selector="ToggleSwitch">
+    <Setter Property="Template">
+        <ControlTemplate>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <!-- 开关轨道 -->
+                <Border x:Name="PART_SwitchRoot"
+                        Width="44" Height="24"
+                        CornerRadius="12"
+                        Background="{StaticResource CsMutedBrush}">
+                    <!-- 开关滑块 -->
+                    <Border x:Name="PART_SwitchThumb"
+                            Width="20" Height="20"
+                            CornerRadius="10"
+                            Background="White"
+                            Margin="2"
+                            HorizontalAlignment="Left"/>
+                </Border>
+                <!-- 内容 -->
+                <ContentPresenter Content="{TemplateBinding Content}"
+                                  VerticalAlignment="Center"/>
+            </StackPanel>
+        </ControlTemplate>
+    </Setter>
+</Style>
+
+<!-- 选中状态 -->
+<Style Selector="ToggleSwitch:checked /template/ Border#PART_SwitchRoot">
+    <Setter Property="Background" Value="{StaticResource CsPrimaryBrush}"/>
+</Style>
+
+<Style Selector="ToggleSwitch:checked /template/ Border#PART_SwitchThumb">
+    <Setter Property="HorizontalAlignment" Value="Right"/>
+</Style>
+```
+
+### 9.4.2 Slider 详解
+
+```xml
+<Slider Minimum="0"
+        Maximum="100"
+        Value="{Binding Volume}"
+        TickFrequency="10"
+        IsSnapToTickEnabled="True"
+        Orientation="Horizontal"/>
+```
+
+**核心属性**
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `Minimum` | `double` | 最小值 |
+| `Maximum` | `double` | 最大值 |
+| `Value` | `double` | 当前值 |
+| `TickFrequency` | `double` | 刻度间距 |
+| `IsSnapToTickEnabled` | `bool` | 是否吸附到刻度 |
+| `Orientation` | `Orientation` | 水平/垂直 |
+| `IsDirectionReversed` | `bool` | 是否反转方向 |
+
+### 9.4.3 ProgressBar 详解
+
+```xml
+<ProgressBar Minimum="0"
+             Maximum="100"
+             Value="{Binding DownloadProgress}"
+             IsIndeterminate="{Binding IsLoading}"
+             ShowProgressText="True"
+             CornerRadius="4"/>
+```
+
+**核心属性**
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `Minimum` | `double` | 最小值 |
+| `Maximum` | `double` | 最大值 |
+| `Value` | `double` | 当前值 |
+| `IsIndeterminate` | `bool` | 不确定模式（加载动画） |
+| `ShowProgressText` | `bool` | 是否显示百分比文字 |
+| `CornerRadius` | `CornerRadius` | 圆角 |
+
+### 9.4.4 NumericUpDown 详解
+
+```xml
+<NumericUpDown Minimum="0"
+               Maximum="100"
+               Value="{Binding Quantity}"
+               FormatString="F0"
+               Increment="1"
+               Watermark="Enter a number"
+               SpinnerPlacement="Right"/>
+```
+
+**核心属性**
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `Minimum` | `decimal?` | 最小值 |
+| `Maximum` | `decimal?` | 最大值 |
+| `Value` | `decimal?` | 当前值 |
+| `Increment` | `decimal` | 步进值 |
+| `FormatString` | `string?` | 数字格式化字符串 |
+| `Watermark` | `string?` | 水印文本 |
+| `SpinnerPlacement` | `Location` | 微调器位置 |
+
+### 9.4.5 DataGrid 详解
+
+```xml
+<DataGrid ItemsSource="{Binding Providers}"
+          AutoGenerateColumns="False"
+          IsReadOnly="True"
+          CanUserResizeColumns="True"
+          CanUserSortColumns="True"
+          GridLinesVisibility="Horizontal"
+          SelectionMode="Single">
+    <DataGrid.Columns>
+        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200"/>
+        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100"/>
+        <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding IsEnabled}" Width="80"/>
+        <DataGridTemplateColumn Header="Actions" Width="120">
+            <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Edit" Classes="small"/>
+                        <Button Content="Delete" Classes="small destructive"/>
+                    </StackPanel>
+                </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+    </DataGrid.Columns>
+</DataGrid>
+```
+
+## 9.5 CodexSwitch 实战
+
+### 9.5.1 CsSegmentedControl 完整解析
+
+`CsSegmentedControl` 是 CodexSwitch 中最复杂的自定义控件之一，它实现了一个带滑动选中指示器的分段选择器。
+
+**控件类（逻辑层）**
+
+```csharp
+public class CsSegmentedControl : ContentControl
+{
+    private static readonly TimeSpan PillAnimationDuration = TimeSpan.FromMilliseconds(180);
+    private readonly HashSet<CsSegmentedButton> _trackedButtons = [];
+    private Border? _selectedPill;
+    private Control? _selectionLayer;
+    private DispatcherTimer? _animationTimer;
+    private bool _hasPillPosition;
+    private double _pillX, _pillY, _pillWidth, _pillHeight;
+```
+
+**关键设计：模板部件查找**
+
+```csharp
+protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
+{
+    base.OnApplyTemplate(e);
+
+    // 从 ControlTemplate 中查找命名元素
+    _selectedPill = e.NameScope.Find<Border>("PART_SelectedPill");
+    _selectionLayer = e.NameScope.Find<Control>("PART_SelectionLayer");
+
+    EnsurePillTransform();
+    // Post 到 Loaded 优先级，确保布局完成后再计算位置
+    Dispatcher.UIThread.Post(() => UpdateSelectionPill(animate: false), DispatcherPriority.Loaded);
+}
+```
+
+**关键设计：视觉树跟踪**
+
+```csharp
+private void TrackSegmentedButtons()
+{
+    // 同时从视觉树和逻辑树查找所有 CsSegmentedButton
+    var buttons = this.GetVisualDescendants()
+        .OfType<CsSegmentedButton>()
+        .Concat(this.GetLogicalDescendants().OfType<CsSegmentedButton>())
+        .ToHashSet();
+
+    // 取消订阅已移除的按钮
+    foreach (var button in _trackedButtons.ToArray())
+    {
+        if (buttons.Contains(button)) continue;
+        button.PropertyChanged -= OnSegmentedButtonPropertyChanged;
+        _trackedButtons.Remove(button);
+    }
+
+    // 订阅新添加的按钮
+    foreach (var button in buttons)
+    {
+        if (!_trackedButtons.Add(button)) continue;
+        button.PropertyChanged += OnSegmentedButtonPropertyChanged;
+    }
+}
+```
+
+**关键设计：坐标转换与动画**
+
+```csharp
+private void UpdateSelectionPill(bool animate)
+{
+    var selected = _trackedButtons.FirstOrDefault(b => b.IsSelected && b.IsVisible);
+    if (selected is null || selected.Bounds.Width <= 0)
+    {
+        _selectedPill.Opacity = 0;
+        return;
+    }
+
+    // 将选中按钮的 (0,0) 转换到 _selectionLayer 的坐标系
+    var topLeft = selected.TranslatePoint(new Point(0, 0), _selectionLayer);
+    if (topLeft is null) return;
+
+    var targetX = topLeft.Value.X;
+    var targetY = topLeft.Value.Y;
+
+    if (!animate || !_hasPillPosition)
+    {
+        // 直接跳到目标位置（无动画）
+        ApplyPill(targetX, targetY, selected.Bounds.Width, selected.Bounds.Height, 1);
+        return;
+    }
+
+    // 平滑动画移动到目标位置
+    AnimatePill(targetX, targetY, selected.Bounds.Width, selected.Bounds.Height);
+}
+```
+
+### 9.5.2 CsSegmentedButton 解析
+
+这是最简洁的自定义控件——只添加一个 `IsSelected` 属性和对应的伪类：
+
+```csharp
+[PseudoClasses(":selected")]
+public sealed class CsSegmentedButton : Button
+{
     public static readonly StyledProperty<bool> IsSelectedProperty =
         AvaloniaProperty.Register<CsSegmentedButton, bool>(nameof(IsSelected));
 
-    // 伪类定义
-    [PseudoClasses(":selected")]
-
-    // 属性变更处理
     static CsSegmentedButton()
     {
         IsSelectedProperty.Changed.AddClassHandler<CsSegmentedButton>((button, args) =>
@@ -770,57 +1040,111 @@ public class CsSegmentedButton : Button
         });
     }
 
-    // CLR 属性包装器
     public bool IsSelected
     {
         get => GetValue(IsSelectedProperty);
         set => SetValue(IsSelectedProperty, value);
     }
-
-    // 注意：没有模板定义，没有视觉逻辑
 }
 ```
 
-```xml
-<!-- 外观在样式中定义 -->
-<Style Selector="ui|CsSegmentedButton">
-    <Setter Property="Template">
-        <ControlTemplate>
-            <Border Background="{TemplateBinding Background}"
-                    CornerRadius="{StaticResource CsRadiusSm}">
-                <ContentPresenter/>
-            </Border>
-        </ControlTemplate>
-    </Setter>
-</Style>
+配合样式系统，`:selected` 伪类驱动视觉变化：
 
-<!-- 不同状态的外观 -->
+```xml
 <Style Selector="ui|CsSegmentedButton:selected">
-    <Setter Property="Background" Value="{StaticResource CsSegmentedPillBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource CsForegroundBrush}"/>
 </Style>
 ```
 
-### Lookless 控件设计模式
-
-**1. 属性驱动**
+### 9.5.3 CsDialog 的极简淡入实现
 
 ```csharp
-public class CsBadge : ContentControl
+public sealed class CsDialog : ContentControl
 {
-    // 通过属性控制外观
-    public static readonly StyledProperty<string?> VariantProperty =
-        AvaloniaProperty.Register<CsBadge, string?>(nameof(Variant));
-
-    public string? Variant
+    public CsDialog()
     {
-        get => GetValue(VariantProperty);
-        set => SetValue(VariantProperty, value);
+        Opacity = 0; // 初始不可见
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        // 当 IsVisible 变为 true 时
+        if (change.Property != IsVisibleProperty ||
+            change.NewValue is not bool isVisible || !isVisible)
+            return;
+
+        Opacity = 0;
+        // Post 到 Render 优先级——下一帧再设置 Opacity=1
+        // 这样 DoubleTransition 才能检测到从 0 到 1 的变化
+        Dispatcher.UIThread.Post(() => Opacity = 1, DispatcherPriority.Render);
     }
 }
 ```
 
+配合样式中的 `DoubleTransition`：
+
 ```xml
-<!-- 根据属性值应用不同样式 -->
+<Style Selector="ui|CsDialog">
+    <Setter Property="Transitions">
+        <Transitions>
+            <DoubleTransition Property="Opacity" Duration="0:0:0.2"/>
+        </Transitions>
+    </Setter>
+</Style>
+```
+
+## 9.6 举一反三
+
+### 9.6.1 与 WPF 的差异
+
+| 特性 | WPF | Avalonia |
+|------|-----|----------|
+| 属性系统 | `DependencyProperty` | `StyledProperty` / `DirectProperty` |
+| 模板查找 | `GetTemplateChild()` | `e.NameScope.Find()` |
+| 伪类 | 无 | `PseudoClasses.Set()` |
+| 样式选择器 | `TargetType` | CSS 风格 `Selector="Type:class:pseudoclass"` |
+| 布局 | 相同（Measure/Arrange） | 相同 |
+| 渲染 | `OnRender(DrawingContext)` | `Render(DrawingContext)` |
+
+### 9.6.2 与 CSS 的类比
+
+| CSS | Avalonia |
+|-----|----------|
+| `.class` | `Classes` / `.class` |
+| `:hover` | `:pointerover` |
+| `:active` | `:pressed` |
+| `:checked` | `:checked` |
+| `::before` | 无直接等价 |
+| `[attr]` | `[Property=Value]` |
+
+## 9.7 最佳实践与设计模式
+
+### 9.7.1 Lookless 控件设计
+
+```csharp
+// 好：只定义属性和逻辑，外观在 Style 中
+public class CsProgressRing : Control
+{
+    public static readonly StyledProperty<double> ProgressProperty =
+        AvaloniaProperty.Register<CsProgressRing, double>(nameof(Progress));
+    // 没有 Render() 覆盖——视觉在 Style 中定义
+}
+```
+
+### 9.7.2 属性驱动外观
+
+```csharp
+// 好：通过属性值驱动不同样式
+public class CsBadge : ContentControl
+{
+    public static readonly StyledProperty<string?> VariantProperty =
+        AvaloniaProperty.Register<CsBadge, string?>(nameof(Variant));
+}
+```
+
+```xml
 <Style Selector="ui|CsBadge[Variant=success]">
     <Setter Property="Background" Value="{StaticResource CsSuccessBrush}"/>
 </Style>
@@ -829,271 +1153,215 @@ public class CsBadge : ContentControl
 </Style>
 ```
 
-**2. 类驱动**
+## Deep Dive：内部原理
+
+### 渲染管线
+
+```
+属性变更
+    -> AffectsRender 标记脏区域
+    -> InvalidateVisual() 入队
+    -> 渲染循环在下一帧调用 Render()
+    -> DrawingContext 记录绘制指令
+    -> Skia 批量执行 GPU 绘制
+```
+
+### 模板应用时序
+
+```
+构造函数
+    -> 属性初始化（默认值）
+    -> 添加到可视化树（OnAttachedToVisualTree）
+    -> 首次测量（MeasureOverride）
+    -> 模板应用（OnApplyTemplate）  ← 这里才能查找 PART_*
+    -> 首次渲染（Render）
+```
+
+### 命中测试原理
+
+```
+用户点击坐标 (x, y)
+    -> 从根元素开始递归检查
+    -> 检查点是否在控件边界内
+    -> 检查 IsHitTestVisible
+    -> 检查命中测试几何形状（默认为矩形）
+    -> 返回最具体的命中元素
+```
+
+自定义命中测试：
 
 ```csharp
-public class CsButton : Button
+public class CircleControl : Control
 {
-    // 不需要额外代码，使用 Classes 属性
-}
-```
-
-```xml
-<!-- 根据类名应用不同样式 -->
-<Style Selector="ui|CsButton.primary">
-    <Setter Property="Background" Value="{StaticResource CsPrimaryBrush}"/>
-</Style>
-<Style Selector="ui|CsButton.destructive">
-    <Setter Property="Background" Value="{StaticResource CsDestructiveBrush}"/>
-</Style>
-```
-
-**3. 状态驱动**
-
-```csharp
-public class CsSwitch : CheckBox
-{
-    // 使用伪类驱动状态
-    // Avalonia 自动为 CheckBox 添加 :checked 伪类
-}
-```
-
-```xml
-<!-- 根据伪类状态应用不同样式 -->
-<Style Selector="ui|CsSwitch">
-    <Setter Property="Template">
-        <ControlTemplate>
-            <Border x:Name="PART_SwitchRoot">
-                <Border x:Name="PART_SwitchThumb"/>
-            </Border>
-        </ControlTemplate>
-    </Setter>
-</Style>
-<Style Selector="ui|CsSwitch:checked /template/ Border#PART_SwitchRoot">
-    <Setter Property="Background" Value="{StaticResource CsPrimaryBrush}"/>
-</Style>
-```
-
-## 9.14 深入：自定义控件测试
-
-### 单元测试控件逻辑
-
-```csharp
-public class CsSegmentedButtonTests
-{
-    [Fact]
-    public void IsSelected_SetsPseudoClass()
+    public override bool HitTest(Point point)
     {
-        var button = new CsSegmentedButton();
-
-        button.IsSelected = true;
-
-        Assert.True(button.Classes.Contains(":selected"));
-    }
-
-    [Fact]
-    public void IsSelected_False_RemovesPseudoClass()
-    {
-        var button = new CsSegmentedButton();
-        button.IsSelected = true;
-
-        button.IsSelected = false;
-
-        Assert.False(button.Classes.Contains(":selected"));
+        var center = new Point(Bounds.Width / 2, Bounds.Height / 2);
+        var radius = Math.Min(Bounds.Width, Bounds.Height) / 2;
+        var distance = Math.Sqrt(
+            Math.Pow(point.X - center.X, 2) +
+            Math.Pow(point.Y - center.Y, 2));
+        return distance <= radius;
     }
 }
 ```
 
-### 集成测试控件渲染
-
-```csharp
-public class CsRollingNumberTests
-{
-    [Fact]
-    public void Render_DisplaysCorrectValue()
-    {
-        var control = new CsRollingNumber { Value = 12345 };
-
-        // 创建测试窗口
-        var window = new Window
-        {
-            Content = control,
-            Width = 200,
-            Height = 50
-        };
-
-        // 显示窗口并等待布局完成
-        window.Show();
-
-        // 验证渲染结果
-        // 注意：实际测试中可能需要截图比较或使用测试框架
-    }
-}
-```
-
-### 测试控件模板
-
-```csharp
-public class CsDialogTests
-{
-    [Fact]
-    public void OnApplyTemplate_FindsTemplateParts()
-    {
-        var dialog = new CsDialog();
-
-        // 应用模板
-        var template = new ControlTemplate((_, _) =>
-        {
-            return new Border
-            {
-                Name = "PART_DialogRoot",
-                Child = new ContentPresenter()
-            };
-        });
-
-        dialog.Template = template;
-        dialog.ApplyTemplate();
-
-        // 验证模板部件
-        var root = dialog.GetTemplateChildren()
-            .FirstOrDefault(c => c.Name == "PART_DialogRoot");
-        Assert.NotNull(root);
-    }
-}
-```
-
-### 测试控件属性
-
-```csharp
-public class CsSectionTests
-{
-    [Fact]
-    public void Title_DefaultValueIsNull()
-    {
-        var section = new CsSection();
-        Assert.Null(section.Title);
-    }
-
-    [Fact]
-    public void Title_SetValue_RaisesPropertyChanged()
-    {
-        var section = new CsSection();
-        var raised = false;
-        section.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(CsSection.Title))
-                raised = true;
-        };
-
-        section.Title = "Test";
-
-        Assert.True(raised);
-        Assert.Equal("Test", section.Title);
-    }
-}
-```
-
-## 9.15 跨引用
+## Cross References
 
 - **样式系统**：控件模板在样式中定义，参见 [第 7 章](07-styling-theming.md)
 - **数据模板**：ItemsControl 和 ContentControl 的模板机制参见 [第 8 章](08-data-templates.md)
 - **动画过渡**：控件状态变化时的动画参见 [第 10 章](10-animation-transitions.md)
+- **自定义渲染**：`Render(DrawingContext)` 的详细 API 参见 [第 14 章](14-custom-rendering.md)
 - **属性系统**：StyledProperty 和 DirectProperty 的详细机制参见 [第 22 章](22-property-system.md)
 - **可视化树**：控件树的结构和遍历参见 [第 23 章](23-visual-logical-tree.md)
+- **编译绑定**：模板中的绑定优化参见 [第 15 章](15-compiled-bindings.md)
 
-## 9.16 常见陷阱
+## Common Pitfalls
 
 ### 陷阱 1：在构造函数中访问模板部件
 
 ```csharp
-// 问题：模板还没有应用，无法访问模板部件
-public class CsSegmentedControl : ContentControl
+// 错误：模板还没有应用
+public CsSegmentedControl()
 {
-    public CsSegmentedControl()
-    {
-        _selectedPill = this.FindControl<Border>("PART_SelectedPill");  // 错误
-    }
+    _selectedPill = this.FindControl<Border>("PART_SelectedPill"); // null!
 }
 
-// 解决：在 OnApplyTemplate 中访问
+// 正确：在 OnApplyTemplate 中访问
 protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
 {
-    base.OnApplyTemplate(e);
-    _selectedPill = e.NameScope.Find<Border>("PART_SelectedPill");  // 正确
+    _selectedPill = e.NameScope.Find<Border>("PART_SelectedPill");
 }
 ```
 
 ### 陷阱 2：忘记清理资源
 
 ```csharp
-// 问题：没有在 OnDetachedFromVisualTree 中停止定时器
+// 错误：控件移除后定时器继续运行
 protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
 {
-    base.OnDetachedFromVisualTree(e);
-    // 忘记停止 _animationTimer
+    // 忘记停止 _animationTimer —— 内存泄漏
 }
 
-// 解决：总是清理资源
+// 正确：总是清理
 protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
 {
     base.OnDetachedFromVisualTree(e);
-    StopAnimation();  // 停止定时器
+    _animationTimer?.Stop();
     _animationTimer = null;
+    foreach (var button in _trackedButtons)
+        button.PropertyChanged -= OnSegmentedButtonPropertyChanged;
+    _trackedButtons.Clear();
 }
 ```
 
-### 陷阱 3：StyledProperty 默认值类型错误
+### 陷阱 3：StyledProperty 默认值类型不匹配
 
 ```csharp
-// 问题：默认值类型与属性类型不匹配
-public static readonly StyledProperty<int> MaxItemsProperty =
-    AvaloniaProperty.Register<CsMyControl, int>(nameof(MaxItems), 10.5);  // 错误
+// 错误：double 赋给 int 属性
+public static readonly StyledProperty<int> MaxProperty =
+    AvaloniaProperty.Register<MyControl, int>(nameof(Max), 10.5); // 编译错误
 
-// 解决：确保类型匹配
-public static readonly StyledProperty<int> MaxItemsProperty =
-    AvaloniaProperty.Register<CsMyControl, int>(nameof(MaxItems), 10);  // 正确
+// 正确：
+AvaloniaProperty.Register<MyControl, int>(nameof(Max), 10);
 ```
 
-### 陷阱 4：模板部件命名约定
+### 陷阱 4：模板部件未使用 PART_ 前缀
 
 ```xml
-<!-- 问题：模板部件没有使用 PART_ 前缀 -->
-<ControlTemplate>
-    <Border x:Name="SelectedPill"/>  <!-- 不规范 -->
-</ControlTemplate>
+<!-- 不规范：工具和文档无法识别 -->
+<Border x:Name="SelectedPill"/>
 
-<!-- 正确：使用 PART_ 前缀 -->
-<ControlTemplate>
-    <Border x:Name="PART_SelectedPill"/>  <!-- 规范 -->
-</ControlTemplate>
+<!-- 规范：PART_ 前缀是约定 -->
+<Border x:Name="PART_SelectedPill"/>
 ```
 
-### 陷阱 5：在 MeasureOverride 中调用 InvalidateMeasure
+### 陷阱 5：在 MeasureOverride 中触发 InvalidateMeasure
 
 ```csharp
-// 问题：在测量过程中触发新的测量，导致无限循环
+// 错误：无限循环
 protected override Size MeasureOverride(Size availableSize)
 {
-    InvalidateMeasure();  // 错误：会导致无限循环
-    return new Size(100, 100);
-}
-
-// 解决：避免在测量过程中触发布局
-protected override Size MeasureOverride(Size availableSize)
-{
-    // 只计算尺寸，不要触发布局
+    InvalidateMeasure(); // 触发新的测量，再次调用 MeasureOverride...
     return new Size(100, 100);
 }
 ```
 
-## 9.17 动手练习
+### 陷阱 6：TemplateBinding 不支持复杂绑定
 
-### 练习 1：创建自定义控件
+```xml
+<!-- 错误：TemplateBinding 不支持 StringFormat -->
+<TextBlock Text="{TemplateBinding Value, StringFormat='{}{0:F2}'}"/>
 
-在 CodexSwitch 中创建一个新的自定义控件 `CsProgressRing`：
+<!-- 正确：使用完整 Binding -->
+<TextBlock Text="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, StringFormat='{}{0:F2}'}"/>
+```
+
+### 陷阱 7：忘记调用 base.OnApplyTemplate
 
 ```csharp
-// 1. 定义控件类
+// 错误：跳过基类
+protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
+{
+    _myPart = e.NameScope.Find<Border>("PART_MyPart");
+    // base.OnApplyTemplate(e); -- 漏了！
+}
+```
+
+### 陷阱 8：ItemsControl 中忘记虚拟化
+
+```xml
+<!-- 问题：大数据集性能差 -->
+<ItemsControl.ItemsPanel>
+    <ItemsPanelTemplate>
+        <StackPanel/>  <!-- 渲染所有项 -->
+    </ItemsPanelTemplate>
+</ItemsControl.ItemsPanel>
+
+<!-- 解决：使用虚拟化面板 -->
+<ItemsControl.ItemsPanel>
+    <ItemsPanelTemplate>
+        <VirtualizingStackPanel/>  <!-- 只渲染可见项 -->
+    </ItemsPanelTemplate>
+</ItemsControl.ItemsPanel>
+```
+
+### 陷阱 9：ContentPresenter 的 Content 与 ContentTemplate 混淆
+
+```xml
+<!-- Content 直接显示对象 -->
+<ContentPresenter Content="{Binding MyObject}"/>
+
+<!-- ContentTemplate 定义如何显示对象 -->
+<ContentPresenter Content="{Binding MyObject}"
+                  ContentTemplate="{StaticResource MyTemplate}"/>
+```
+
+### 陷阱 10：AdornerLayer 的叠加层位置
+
+Adorner 默认相对于被装饰元素的左上角定位。如果被装饰元素在 ScrollViewer 中滚动，Adorner 不会自动跟随——需要手动更新位置。
+
+### 陷阱 11：PseudoClasses 的 set/get 不对称
+
+```csharp
+// 错误：用 Classes 管理伪类
+button.Classes.Add(":selected"); // 语法正确但不推荐
+
+// 正确：用 PseudoClasses
+button.PseudoClasses.Set(":selected", true);  // 设置
+button.PseudoClasses.Set(":selected", false); // 移除
+```
+
+### 陷阱 12：Decorator 的 Child 属性
+
+`Decorator.Child` 是单个子元素。如果需要多个子元素，使用 `Panel` 作为 Child，然后在 Panel 中放置多个子元素。
+
+## Try It Yourself
+
+### 练习 1：创建 CsProgressRing
+
+创建一个环形进度控件：
+
+```csharp
 public class CsProgressRing : Control
 {
     public static readonly StyledProperty<double> ProgressProperty =
@@ -1102,26 +1370,24 @@ public class CsProgressRing : Control
     public static readonly StyledProperty<double> StrokeThicknessProperty =
         AvaloniaProperty.Register<CsProgressRing, double>(nameof(StrokeThickness), 4d);
 
+    public static readonly StyledProperty<IBrush?> ForegroundProperty =
+        AvaloniaProperty.Register<CsProgressRing, IBrush?>(nameof(Foreground));
+
     static CsProgressRing()
     {
-        AffectsRender<CsProgressRing>(ProgressProperty, StrokeThicknessProperty);
+        AffectsRender<CsProgressRing>(ProgressProperty, StrokeThicknessProperty, ForegroundProperty);
+        AffectsMeasure<CsProgressRing>(StrokeThicknessProperty);
     }
 
-    public double Progress
-    {
-        get => GetValue(ProgressProperty);
-        set => SetValue(ProgressProperty, value);
-    }
-
-    public double StrokeThickness
-    {
-        get => GetValue(StrokeThicknessProperty);
-        set => SetValue(StrokeThicknessProperty, value);
-    }
+    public double Progress { get => GetValue(ProgressProperty); set => SetValue(ProgressProperty, value); }
+    public double StrokeThickness { get => GetValue(StrokeThicknessProperty); set => SetValue(StrokeThicknessProperty, value); }
+    public IBrush? Foreground { get => GetValue(ForegroundProperty); set => SetValue(ForegroundProperty, value); }
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        var size = Math.Min(availableSize.Width, availableSize.Height);
+        var size = Math.Min(
+            double.IsInfinity(availableSize.Width) ? 40 : availableSize.Width,
+            double.IsInfinity(availableSize.Height) ? 40 : availableSize.Height);
         return new Size(size, size);
     }
 
@@ -1129,83 +1395,106 @@ public class CsProgressRing : Control
     {
         var center = new Point(Bounds.Width / 2, Bounds.Height / 2);
         var radius = Math.Min(Bounds.Width, Bounds.Height) / 2 - StrokeThickness / 2;
-        var angle = Progress * 360;
 
-        // 绘制背景圆环
-        context.DrawEllipse(null, new Pen(Brushes.Gray, StrokeThickness),
-            center, radius, radius);
+        // 背景环
+        context.DrawEllipse(null, new Pen(Brushes.Gray, StrokeThickness), center, radius, radius);
 
-        // 绘制进度圆弧
+        // 进度弧（使用 StreamGeometry）
         if (Progress > 0)
         {
-            var geometry = new ArcGeometry(center, radius, 0, angle);
-            context.DrawGeometry(null, new Pen(Foreground, StrokeThickness), geometry);
+            var geometry = new StreamGeometry();
+            using (var ctx = geometry.Open())
+            {
+                var startAngle = -90;
+                var sweepAngle = Progress * 360;
+                var startRad = startAngle * Math.PI / 180;
+                var endRad = (startAngle + sweepAngle) * Math.PI / 180;
+
+                var startPoint = new Point(
+                    center.X + radius * Math.Cos(startRad),
+                    center.Y + radius * Math.Sin(startRad));
+                var endPoint = new Point(
+                    center.X + radius * Math.Cos(endRad),
+                    center.Y + radius * Math.Sin(endRad));
+
+                ctx.BeginFigure(startPoint, false);
+                ctx.ArcTo(endPoint, new Size(radius, radius), 0, sweepAngle > 180, SweepDirection.Clockwise);
+            }
+
+            context.DrawGeometry(null, new Pen(Foreground ?? Brushes.Blue, StrokeThickness), geometry);
         }
     }
 }
 ```
 
-### 练习 2：添加样式
+### 练习 2：创建 CsToast 通知
 
-在 `Styles/Components/` 中为 `CsProgressRing` 创建样式：
+实现一个自动消失的通知控件：
+- 定义 `Message`、`Duration`、`Variant` 属性
+- 使用 `DispatcherTimer` 实现自动消失
+- 使用 `TranslateTransform` + `DoubleTransition` 实现滑入/滑出动画
 
-```xml
-<Style Selector="ui|CsProgressRing">
-    <Setter Property="Foreground" Value="{StaticResource CsPrimaryBrush}"/>
-    <Setter Property="Width" Value="40"/>
-    <Setter Property="Height" Value="40"/>
-</Style>
-```
+### 练习 3：创建 CsRating 评分控件
 
-### 练习 3：测试控件
+实现一个星级评分控件：
+- 定义 `Value`（0-5）、`StarCount`、`StarSize` 属性
+- 在 `Render` 中使用 `DrawGeometry` 绘制五角星
+- 支持半星显示
+- 支持鼠标悬停预览
 
-为 `CsProgressRing` 编写单元测试：
+### 练习 4：自定义 ListBoxItem 模板
+
+为 ListBoxItem 创建自定义模板：
+- 左侧图标 + 文字 + 右侧删除按钮
+- 选中状态高亮
+- 悬停效果
+- 拖拽手柄
+
+### 练习 5：实现 CsAccordion 手风琴控件
+
+创建一个可折叠的面板组：
+- 继承 `ItemsControl`
+- 每个面板有标题和可折叠内容
+- 展开时有高度动画
+- 同一时间只展开一个面板（可选）
+
+### 练习 6：创建 CsTooltip 自定义提示
+
+使用 AdornerLayer 实现自定义提示：
+- 鼠标悬停时在控件上方显示
+- 有淡入淡出动画
+- 自动定位避免超出屏幕
+
+### 练习 7：实现自定义面板
+
+创建一个 `FlowPanel`（类似 WrapPanel 但有行间距和列间距）：
 
 ```csharp
-public class CsProgressRingTests
+public class FlowPanel : Panel
 {
-    [Fact]
-    public void Progress_DefaultValue_IsZero()
+    public static readonly StyledProperty<double> RowSpacingProperty =
+        AvaloniaProperty.Register<FlowPanel, double>(nameof(RowSpacing));
+
+    public static readonly StyledProperty<double> ColumnSpacingProperty =
+        AvaloniaProperty.Register<FlowPanel, double>(nameof(ColumnSpacing));
+
+    protected override Size MeasureOverride(Size availableSize)
     {
-        var ring = new CsProgressRing();
-        Assert.Equal(0d, ring.Progress);
+        // 遍历 Children，计算每行宽度，超过时换行
+        // ...
     }
 
-    [Fact]
-    public void Progress_SetValue_RaisesPropertyChanged()
+    protected override Size ArrangeOverride(Size finalSize)
     {
-        var ring = new CsProgressRing();
-        var raised = false;
-        ring.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(CsProgressRing.Progress))
-                raised = true;
-        };
-
-        ring.Progress = 0.5;
-
-        Assert.True(raised);
-        Assert.Equal(0.5, ring.Progress);
-    }
-
-    [Fact]
-    public void MeasureOverride_ReturnsSquareSize()
-    {
-        var ring = new CsProgressRing();
-        var size = ring.MeasureOverride(new Size(100, 200));
-        Assert.Equal(100, size.Width);
-        Assert.Equal(100, size.Height);
+        // 按行排列子元素
+        // ...
     }
 }
 ```
 
-### 练习 4：集成到页面
+### 练习 8：对比 UserControl 和 TemplatedControl
 
-在 CodexSwitch 的某个页面中使用 `CsProgressRing`：
-
-```xml
-<StackPanel>
-    <ui:CsProgressRing Progress="{Binding UploadProgress}"/>
-    <TextBlock Text="{Binding UploadProgress, StringFormat='{}{0:P0}'}"/>
-</StackPanel>
-```
+将同一个控件分别用 UserControl 和 TemplatedControl 实现，对比：
+- 代码量差异
+- 可定制性差异
+- 样式覆盖能力差异

@@ -1,8 +1,10 @@
 # 8. DataTemplate 深度解析
 
+> **写给零基础的你**：DataTemplate 就像一个"模具"。你有一堆数据（比如联系人列表），每个联系人有名字、电话、头像。DataTemplate 定义了"每个联系人应该长什么样"——名字放左边，电话放右边，头像放最前面。有了模具，你不需要手动摆每一个联系人，系统会自动套用模具来显示。
+
 ## 8.1 基础 DataTemplate
 
-DataTemplate 定义数据对象如何在 UI 中呈现：
+DataTemplate 定义数据对象如何在 UI 中呈现（就像模具定义了产品的形状）：
 
 ```xml
 <ItemsControl ItemsSource="{Binding Providers}">
@@ -21,11 +23,14 @@ DataTemplate 定义数据对象如何在 UI 中呈现：
 
 ### 关键：x:DataType
 
+> **小白提示**：`x:DataType` 就是告诉模具"你处理的是什么材料"。就像面包模具要知道"这是面粉团"，蛋糕模具要知道"这是蛋糕糊"。写了 `x:DataType` 后，编译器就能检查你绑定的属性名是否正确。
+
 在每个 DataTemplate 中指定 `x:DataType` 启用编译绑定：
 
 ```xml
 <DataTemplate x:DataType="vm:ProviderListItem">
     <!-- 编译器会验证 ProviderListItem 是否有 Name 属性 -->
+    <!-- 如果 ProviderListItem 没有 Name 属性，编译时就会报错 -->
     <TextBlock Text="{Binding Name}"/>
 </DataTemplate>
 ```
@@ -804,6 +809,119 @@ public class ProviderListBox : ListBox
 </DataTemplate>
 ```
 
+### 陷阱 6：DataTemplate 中使用 StaticResource 导致主题不切换
+
+```xml
+<!-- 问题：StaticResource 在编译时解析，主题切换时不更新 -->
+<DataTemplate x:DataType="vm:ProviderListItem">
+    <Border Background="{StaticResource CsCardBrush}">
+        <TextBlock Text="{Binding Name}"/>
+    </Border>
+</DataTemplate>
+
+<!-- 解决：如果需要响应主题切换，使用 DynamicResource -->
+<DataTemplate x:DataType="vm:ProviderListItem">
+    <Border Background="{DynamicResource CsCardBrush}">
+        <TextBlock Text="{Binding Name}"/>
+    </Border>
+</DataTemplate>
+```
+
+注意：CodexSwitch 通过就地修改 `SolidColorBrush.Color` 实现主题切换，所以 `StaticResource` 也能正常工作。
+
+### 陷阱 7：ContentControl 的 Content 与 ContentTemplate 混淆
+
+```xml
+<!-- 问题：ContentTemplate 设置了模板但 Content 没有设置数据 -->
+<ContentControl ContentTemplate="{StaticResource MyTemplate}"/>
+<!-- 没有 Content，模板不会显示任何内容 -->
+
+<!-- 正确：必须同时设置 Content 和 ContentTemplate -->
+<ContentControl Content="{Binding CurrentItem}"
+                ContentTemplate="{StaticResource MyTemplate}"/>
+
+<!-- 或者使用 DataTemplates 集合自动匹配 -->
+<ContentControl Content="{Binding SelectedObject}">
+    <ContentControl.DataTemplates>
+        <DataTemplate x:DataType="vm:TypeA">...</DataTemplate>
+        <DataTemplate x:DataType="vm:TypeB">...</DataTemplate>
+    </ContentControl.DataTemplates>
+</ContentControl>
+```
+
+### 陷阱 8：ItemsControl 默认没有滚动条
+
+```xml
+<!-- 问题：ItemsControl 默认不包含 ScrollViewer -->
+<ItemsControl ItemsSource="{Binding LargeCollection}">
+    <ItemsControl.ItemTemplate>...</ItemsControl.ItemTemplate>
+</ItemsControl>
+<!-- 如果项目太多，内容会被裁剪 -->
+
+<!-- 解决：手动包装 ScrollViewer -->
+<ScrollViewer>
+    <ItemsControl ItemsSource="{Binding LargeCollection}">
+        <ItemsControl.ItemTemplate>...</ItemsControl.ItemTemplate>
+    </ItemsControl>
+</ScrollViewer>
+
+<!-- 或者使用 ListBox（自带滚动条） -->
+<ListBox ItemsSource="{Binding LargeCollection}">
+    <ListBox.ItemTemplate>...</ListBox.ItemTemplate>
+</ListBox>
+```
+
+### 陷阱 9：DataTemplate 中的 ComboBox/Popup 定位问题
+
+```xml
+<!-- 问题：DataTemplate 中的 ComboBox 下拉列表可能被裁剪 -->
+<DataTemplate x:DataType="vm:ItemModel">
+    <Border ClipToBounds="True">
+        <ComboBox ItemsSource="{Binding Options}"/>
+    </Border>
+</DataTemplate>
+
+<!-- 解决：避免在 DataTemplate 中使用 ClipToBounds -->
+<!-- 或者使用 Overlay 属性让 Popup 显示在最上层 -->
+```
+
+### 陷阱 10：忘记处理 null 值
+
+```xml
+<!-- 问题：如果数据项为 null，绑定会失败 -->
+<DataTemplate x:DataType="vm:ProviderListItem">
+    <TextBlock Text="{Binding Name}"/>
+    <!-- 如果 ProviderListItem 为 null，会显示空 -->
+</DataTemplate>
+
+<!-- 解决：使用 FallbackValue 或 TargetNullValue -->
+<DataTemplate x:DataType="vm:ProviderListItem">
+    <TextBlock Text="{Binding Name, FallbackValue='Unknown'}"/>
+</DataTemplate>
+```
+
+### 陷阱 11：ItemsPanelTemplate 中使用错误的面板类型
+
+```xml
+<!-- 问题：在 ItemsPanelTemplate 中使用普通 StackPanel，失去虚拟化 -->
+<ItemsControl ItemsSource="{Binding LargeCollection}">
+    <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+            <StackPanel/>  <!-- 没有虚拟化，10000 项会很卡 -->
+        </ItemsPanelTemplate>
+    </ItemsControl.ItemsPanel>
+</ItemsControl>
+
+<!-- 正确：大集合使用 VirtualizingStackPanel -->
+<ItemsControl ItemsSource="{Binding LargeCollection}">
+    <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+            <VirtualizingStackPanel/>
+        </ItemsPanelTemplate>
+    </ItemsControl.ItemsPanel>
+</ItemsControl>
+```
+
 ## 8.15 动手练习
 
 ### 练习 1：为 CodexSwitch 添加新的 DataTemplate
@@ -869,3 +987,161 @@ var template = new FuncDataTemplate<UsageLogItem>((item, _) =>
 2. 绑定到包含 10000 个项目的集合
 3. 测量初始加载时间和内存占用
 4. 测试滚动流畅度
+
+### 练习 5：使用 DataTemplates 集合实现多类型显示
+
+创建一个 `ContentControl`，根据绑定的数据类型自动选择不同的 DataTemplate：
+
+```xml
+<ContentControl Content="{Binding SelectedItem}">
+    <ContentControl.DataTemplates>
+        <DataTemplate x:DataType="vm:ProviderModel">
+            <Border Background="{StaticResource CsCardBrush}" Padding="16">
+                <StackPanel>
+                    <TextBlock Text="{Binding ProviderName}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Endpoint}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:DataType="vm:UsageSnapshot">
+            <Border Background="{StaticResource CsCardBrush}" Padding="16">
+                <StackPanel>
+                    <TextBlock Text="使用统计" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding TotalTokens, StringFormat='{}{0:N0} tokens'}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </ContentControl.DataTemplates>
+</ContentControl>
+```
+
+### 练习 6：实现带选择状态的 DataTemplate
+
+创建一个 ListBox，DataTemplate 中根据选中状态显示不同的样式：
+
+```xml
+<ListBox ItemsSource="{Binding Providers}"
+         SelectedItem="{Binding SelectedProvider}">
+    <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ProviderListItem">
+            <Border Padding="12" CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Endpoint}"
+                               Foreground="{StaticResource CsMutedForegroundBrush}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </ListBox.ItemTemplate>
+</ListBox>
+```
+
+然后在样式中处理选中状态：
+
+```xml
+<Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource CsSelectedBrush}"/>
+</Style>
+```
+
+### 练习 7：创建嵌套 DataTemplate
+
+实现一个两级列表：提供商 -> 模型列表：
+
+```xml
+<ItemsControl ItemsSource="{Binding Providers}">
+    <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:ProviderModel">
+            <Expander Header="{Binding ProviderName}">
+                <ItemsControl ItemsSource="{Binding Models}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ModelInfo">
+                            <TextBlock Text="{Binding ModelName}" Margin="16,4,0,4"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Expander>
+        </DataTemplate>
+    </ItemsControl.ItemTemplate>
+</ItemsControl>
+```
+
+### 练习 8：使用 FuncDataTemplate 实现条件渲染
+
+根据数据值动态决定渲染方式：
+
+```csharp
+var template = new FuncDataTemplate<UsageLogItem>((item, _) =>
+{
+    var border = new Border
+    {
+        Padding = new Thickness(8),
+        CornerRadius = new CornerRadius(4)
+    };
+
+    if (item.EstimatedCost > 1.0m)
+    {
+        border.Classes.Add("expensive");
+        border.Background = new SolidColorBrush(Colors.Red, 0.1);
+    }
+    else if (item.EstimatedCost > 0.1m)
+    {
+        border.Classes.Add("moderate");
+        border.Background = new SolidColorBrush(Colors.Yellow, 0.1);
+    }
+
+    border.Child = new TextBlock
+    {
+        Text = $"{item.ModelName}: ${item.EstimatedCost:F4}"
+    };
+
+    return border;
+});
+```
+
+### 练习 9：实现带拖拽排序的 DataTemplate
+
+为 DataTemplate 添加拖拽手柄，实现列表重排序：
+
+```xml
+<DataTemplate x:DataType="vm:ProviderListItem">
+    <Grid ColumnDefinitions="Auto,*">
+        <PathIcon Data="M10 4h4v4h-4zM10 16h4v4h-4z"
+                  Width="12" Height="12"
+                  Classes="drag-handle"
+                  Cursor="SizeAll"
+                  VerticalAlignment="Center"/>
+        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding Endpoint}"
+                       Foreground="{StaticResource CsMutedForegroundBrush}"/>
+        </StackPanel>
+    </Grid>
+</DataTemplate>
+```
+
+### 练习 10：性能优化——减少 DataTemplate 中的视觉树深度
+
+重构一个深层嵌套的 DataTemplate，将其扁平化：
+
+```xml
+<!-- 优化前：5 层嵌套 -->
+<DataTemplate>
+    <Border>
+        <Grid>
+            <StackPanel>
+                <Border>
+                    <TextBlock Text="{Binding Name}"/>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </Border>
+</DataTemplate>
+
+<!-- 优化后：2 层嵌套 -->
+<DataTemplate>
+    <Border Padding="8">
+        <TextBlock Text="{Binding Name}"/>
+    </Border>
+</DataTemplate>
+```
