@@ -1317,6 +1317,449 @@ Verification:
 - `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
 - `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
 
+### Agent C155: AvatarGroup Independent Docs Cases
+
+Status: completed for this Docs coverage pass. This slice promotes `CodexAvatarGroup` from an Avatar anatomy sub-example into its own Feedback Docs page, with local AXAML examples that render the component first and expose their own `Show code` / `Hide code` block directly under each case.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/AvatarGroup.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/AvatarGroupStates.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/AvatarGroupAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/AvatarGroupInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsRenderedLifecycleTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+- `docs-site/content/docs/en/ui-system/feedback.mdx`
+- `docs-site/content/docs/zh/ui-system/feedback.mdx`
+
+Evidence gathered:
+
+- Docs already centralize the user-requested code reveal contract in `BuildInlineExample`: rendered preview, local `Show code` / `Hide code` button, then `DocsCodeBlock` loaded from that exact sample path.
+- The registered Docs catalog had broad page and AXAML coverage, but `CodexAvatarGroup` was still documented only inside `feedback.avatar`, despite being a top-level control in structure tests.
+- `CodexAvatarGroup` owns stacked/inline layout, overlap, inherited child size, hidden child filtering, disabled opacity, and `CodexAvatarGroupCount` overflow behavior, so it deserves independent states/anatomy/interaction examples.
+
+Implementation targets:
+
+- Add `feedback.avatar-group` under Feedback with behavior notes, state matrix, and event matrix entries. Status: completed.
+- Add Default, States, Anatomy, and Interaction AXAML samples for stacked groups, inline groups, compact/large density, hidden members, disabled state, inherited child sizing, status dots, overflow counts, and host composition. Status: completed.
+- Add matching C# preview builders so the Docs app renders the examples before each inline source toggle. Status: completed.
+- Extend rendered Docs coverage and visual fingerprints so the new page is exercised across light, dark, and custom themes with expanded code blocks. Status: completed.
+- Update docs-site Feedback summaries in English and Chinese to call out AvatarGroup as independent coverage. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+
+### Agent C156: Tabs ValueChanged Source Metadata
+
+Status: completed for this Navigation Tabs event-parity slice. This pass keeps the existing `SelectedValue` / `ValueChanged` contract while adding the missing source metadata that lets hosts distinguish primary pointer release, keyboard activation/roving, and programmatic value changes like the Web `onValueChange` path.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexTabs.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/TabsInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- Radix/shadcn Tabs expose a value-driven root with `onValueChange`, automatic/manual activation, loop boundaries, and orientation-aware roving triggers.
+- Local `CodexTabsValueChangedEventArgs` already carried old/new item, index, and value metadata, but did not identify whether the selection came from pointer, keyboard, or a host-owned value change.
+- Nearby Codex selection controls such as SideNav and SegmentedControl already expose source-aware value-change payloads, so Tabs needed the same event-shape parity.
+- Local Docs already render every example before its inline `Show code` / `Hide code` block, so this slice only had to refresh the Tabs interaction example and behavior matrices.
+
+Implementation targets:
+
+- Add `CodexTabsValueChangeSource` with `Programmatic`, `Pointer`, and `Keyboard` values. Status: completed.
+- Extend `CodexTabsValueChangedEventArgs` with `Source` while preserving old/new item, index, and value metadata. Status: completed.
+- Route roving automatic selection, Enter/Space manual activation, primary pointer release, and `SelectedValue` application through source-aware selection helpers. Status: completed.
+- Reject right and middle pointer releases for tab activation and keep disabled tabs suppressed. Status: completed.
+- Refresh Tabs Docs notes, state/event matrices, live interaction status, AXAML sample copy, and docs-site Navigation summaries to expose source-aware `ValueChanged`. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~TabsKeyboardSelectionMirrorsWebRovingTriggers|FullyQualifiedName~TabsValueChangedPublishesSourceMetadataAndPrimaryPointerRelease|FullyQualifiedName~TabsValueChangedCarriesWebStyleSourceMetadata|FullyQualifiedName~DocsPagesRenderStateAndEventMatricesForWebParityContracts"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~ControlStateTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C157: ToggleGroup ValueChanged Source Metadata
+
+Status: completed for this Forms Toggle Group event-parity slice. This pass keeps the standalone Toggle behavior intact while moving `CodexToggleGroup` closer to the Radix/shadcn Toggle Group contract: root-owned single/multiple values now raise `ValueChanged` with source metadata for primary pointer release, keyboard activation, and programmatic selection changes.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexToggle.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/ToggleGroupInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Evidence gathered:
+
+- Existing plan evidence for Agent C45 records the Web Toggle Group surface: single/multiple `value`, `onValueChange`, disabled items, roving focus, orientation, loop, item values, and Arrow/Home/End keyboard navigation.
+- Nearby Codex selection components now expose source-aware value events, including Tabs, RadioGroup, SideNav, SegmentedControl, Carousel, and Pagination, so Toggle Group was the next form selection surface with an event-source gap.
+- Local `CodexToggleGroupValueChangedEventArgs` previously only exposed old/new scalar and array values, making pointer, keyboard, and programmatic paths indistinguishable in Docs and host tests.
+- Local Docs already render the Toggle Group examples before the matching inline `Show code` / `Hide code` AXAML block, so this slice refreshed the existing interaction case rather than changing the Docs shell.
+
+Implementation targets:
+
+- Add `CodexToggleGroupValueChangeSource` with `Programmatic`, `Pointer`, and `Keyboard` values. Status: completed.
+- Extend `CodexToggleGroupValueChangedEventArgs` with `Source` while preserving the existing old/new value and value-array constructor shape. Status: completed.
+- Route item Enter/Space activation through source=Keyboard, primary pointer release through source=Pointer, and `SelectedValue` / `SelectedValues` application through source=Programmatic. Status: completed.
+- Suppress right and middle pointer releases for Toggle Group item activation while keeping disabled item and disabled group guards. Status: completed.
+- Preserve old/new value metadata for programmatic property changes by snapshotting the previous selected value/value array before applying external selection. Status: completed.
+- Refresh Toggle Group Docs notes, state/event matrices, interaction preview status text, AXAML sample copy, and docs-site Forms summaries to expose source-aware `ValueChanged`. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ToggleAndToggleGroupMirrorWebPressedAndSelectionState|FullyQualifiedName~ToggleGroupValueChangedPublishesSourceMetadataAndPrimaryPointerRelease|FullyQualifiedName~ChoiceToggleAndRangeControlsOwnPartsEventsAndNativeChrome|FullyQualifiedName~DocsPagesRenderStateAndEventMatricesForWebParityContracts"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~ControlStateTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C158: Select And NativeSelect Source-Aware Value Events
+
+Status: completed for this Forms select event-parity slice. This pass keeps the existing popup/open behavior intact while extending both `CodexSelect` and `CodexNativeSelect` so value changes carry source metadata for programmatic, pointer, and keyboard selection paths.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexSelect.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexNativeSelect.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/SelectInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/NativeSelectInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Evidence gathered:
+
+- shadcn/Radix Select follows value/open event contracts; local `CodexSelect` and `CodexNativeSelect` already exposed `ValueChanged` and `OpenChanged`, but the value payload only had old/new item, index, and value metadata.
+- Nearby form/navigation selection controls now expose source metadata, including RadioGroup, ToggleGroup, Tabs, SideNav, SegmentedControl, Combobox, Carousel, and Pagination.
+- The active goal calls out broken component event mechanisms, so Select and NativeSelect should not collapse pointer, keyboard, and host-driven selection into indistinguishable events.
+- Docs already render Select and NativeSelect interaction cases above their matching inline AXAML code reveal, so this slice refreshed those cases and behavior matrices rather than changing the Docs shell.
+
+Implementation targets:
+
+- Add `CodexSelectValueChangeSource` and `CodexNativeSelectValueChangeSource` with `Programmatic`, `Pointer`, and `Keyboard` values. Status: completed.
+- Extend `CodexSelectValueChangedEventArgs` and `CodexNativeSelectValueChangedEventArgs` with `Source`, keeping constructor defaults backward compatible. Status: completed.
+- Track pointer and keyboard selection intent around native ComboBox selection, and expose internal source-aware `SelectIndex` helpers for deterministic host/test paths. Status: completed.
+- Preserve existing `OpenChanged`, `popup-open`, placeholder, has-selection, option value, and optgroup behavior. Status: completed.
+- Refresh Select/NativeSelect Docs notes, state/event matrices, interaction preview status text, AXAML sample copy, and docs-site Forms summaries to expose source-aware value changes. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~SelectRaisesWebValueAndOpenChangeEvents|FullyQualifiedName~NativeSelectRaisesWebValueAndOpenChangeEvents|FullyQualifiedName~SelectStyleOwnsPopupItemsAndOpeningMotion|FullyQualifiedName~NativeSelectStyleOwnsOptionsGroupsInvalidAndOpeningMotion|FullyQualifiedName~DocsPagesRenderStateAndEventMatricesForWebParityContracts"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~ControlStateTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C111: Data Display Surface Anatomy Docs And Chrome Guard
+
+Status: completed for this Docs coverage slice. This pass raises the remaining Data Display surface/media/viewport pages from three examples to four by adding independent anatomy cases, while preserving the inline `Show code` / `Hide code` AXAML reveal under each rendered component case.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/CardAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/MetricAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/ImageIconAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/ProviderCardAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/ScrollAreaAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/ApplicationShell.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+
+Evidence gathered:
+
+- The selected pages were the remaining under-covered Data Display surfaces with three cases: Card, Metric, Image icon, Provider card, and Scroll area.
+- The existing Docs `BuildInlineExample` path already renders the preview first and mounts a local `DocsCodeBlock` under that exact example after `Show code`, so each new case only needed a standalone AXAML file plus registration.
+- ProviderCard, StatCard, Metric, ImageIcon, and ScrollArea are native-derived or native-composing surfaces where explicit template parts and scoped selectors guard against default Avalonia/Fluent style leakage.
+
+Implementation targets:
+
+- Add `CardAnatomy`, `MetricAnatomy`, `ImageIconAnatomy`, `ProviderCardAnatomy`, and `ScrollAreaAnatomy` standalone AXAML samples and preview builders. Status: completed.
+- Register each anatomy sample under its component page so the rendered example gets its own local code reveal. Status: completed.
+- Name StatCard, Metric, and ProviderCard template parts more completely, and add ProviderCard focus-visible and disabled style hooks. Status: completed.
+- Add Docs layout tests for the new samples and a structure guard covering Data Display slots, image lifecycle events, provider-card selection/dragging classes, scroll-area viewport parts, motion tokens, and native-style leakage. Status: completed.
+- Refresh reduced-motion visual fingerprints after the new rendered cases were added. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~NavigationDataComponentTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C112: Data Display Chart And Pager Anatomy Docs
+
+Status: completed for this Docs coverage and native chrome guard slice. This pass completes the remaining Data Display under-covered pages by adding independent anatomy cases for pinned table, pagination, ranked bar chart, usage pie chart, and usage trend chart, while keeping each rendered example paired with its local `Show code` / `Hide code` AXAML reveal.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/PinnedTableAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/PaginationAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/RankedBarChartAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/UsagePieChartAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/UsageTrendChartAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Table.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+
+Evidence gathered:
+
+- The selected pages were the remaining Data Display pages with only three cases: Pinned table, Pagination, Ranked bar chart, Usage pie chart, and Usage trend chart.
+- Pinned table and plain table templates contained raw `ScrollViewer` usage, so this slice added scoped table/pinned-table `ScrollViewer`, `ScrollBar`, `Track`, and `Thumb` templates instead of letting platform chrome leak through.
+- Pagination already uses Codex-owned buttons and page-button classes; charts expose pointer/active state and animation properties in control code, so the missing work was docs anatomy coverage plus stronger structure guards.
+
+Implementation targets:
+
+- Add `PinnedTableAnatomy`, `PaginationAnatomy`, `RankedBarChartAnatomy`, `UsagePieChartAnatomy`, and `UsageTrendChartAnatomy` standalone AXAML samples and preview builders. Status: completed.
+- Register each anatomy sample under its component page so every case can reveal its own source below the rendered component. Status: completed.
+- Name additional pinned-table template regions and add scoped Codex table scroll viewer/scrollbar templates. Status: completed.
+- Extend Docs layout tests and component structure guards for pinned-table scroll synchronization, pagination page events and keyboard navigation, chart active states, animation tokens, and native scroll chrome leakage. Status: completed.
+- Refresh reduced-motion Docs visual fingerprints after the new cases and scroll chrome changes. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~NavigationDataComponentTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+
+### Agent C113: Final Low-Coverage Docs Case Expansion
+
+Status: completed for this Docs coverage slice. This pass clears the last low-coverage Docs pages so every registered page now has at least four rendered examples, with each example keeping its local `Show code` / `Hide code` AXAML reveal directly under the component case.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Overview/GettingStartedAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Overview/GettingStartedWorkflow.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Overview/GettingStartedSource.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Layout/ApplicationShellAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Layout/SidebarPrimitivesAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Layout/SectionAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Primitives/TypographyAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Primitives/FocusRingAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Primitives/DirectionAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Primitives/OverlayAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Tokens/MotionAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+
+Evidence gathered:
+
+- The remaining low-coverage pages were `overview.getting-started`, `layout.application-shell`, `layout.sidebar-primitives`, `layout.section`, `primitives.typography`, `primitives.focus-ring`, `primitives.direction`, `primitives.overlay`, and `tokens.motion`.
+- `BuildInlineExample` already places a local toggle and `DocsCodeBlock` below each rendered case, so the missing work was standalone AXAML files, preview builders, and page registration.
+- Docs visual tests treat `Show code` / `Hide code` as reserved toggle text, so in-preview source affordances use distinct labels such as `Source` and `Inspect source`.
+
+Implementation targets:
+
+- Add three Overview workflow/source/anatomy cases and one anatomy case for each remaining Layout, Primitive, and Motion-token page. Status: completed.
+- Register every new case in `ExampleCasesFor` with matching preview builders, keeping the rendered component first and code reveal local to the case. Status: completed.
+- Add `EveryDocsPageExposesAtLeastFourInlineCodeExamples` so future edits cannot regress page-level case coverage below four examples. Status: completed.
+- Refresh reduced-motion Docs visual fingerprints after the new examples were added. Status: completed.
+- Re-run the coverage audit and confirm `TOTAL_LT4 0`. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `python3` coverage audit for registered Docs example counts: `TOTAL_LT4 0`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~NavigationDataComponentTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+
+### Agent C114: Overlay Primary Trigger Event Parity
+
+Status: completed for this overlay trigger event parity slice. This pass aligns Dialog, Alert Dialog, Command Dialog, Sheet, Drawer, and Popover trigger activation with the Web/button-like contract by allowing only primary pointer release to toggle the open state, while keeping Enter/Space keyboard activation unchanged.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDialog.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexPopover.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- `CodexDialog` and `CodexPopover` previously toggled from `ContentPresenter.PointerReleased` without checking which pointer button was released.
+- `CodexSheet`, `CodexDrawer`, `CodexAlertDialog`, and `CodexCommandDialog` inherit the `CodexDialog` trigger path, so one guarded dialog path covers that whole overlay family.
+- Web trigger semantics map to primary pointer activation plus keyboard Enter/Space; secondary pointer releases should not open or close these overlays.
+- Docs event matrices were still describing a generic trigger click, so the visible contract needed to say primary trigger activation explicitly.
+
+Implementation targets:
+
+- Add `TryHandleTriggerPointerRelease(PointerUpdateKind updateKind)` to `CodexDialog` and `CodexPopover`, returning true only for `PointerUpdateKind.LeftButtonReleased` when the control can toggle. Status: completed.
+- Update trigger pointer handlers to read `Properties.PointerUpdateKind` from the current pointer point before toggling. Status: completed.
+- Add overlay behavior coverage proving right and middle button release do not open Dialog, Alert Dialog, Command Dialog, Sheet, Drawer, or Popover, while primary release still opens and disabled controls ignore activation. Status: completed.
+- Add a structure guard so the primary-pointer-only trigger path cannot be accidentally collapsed back into an unqualified pointer release. Status: completed.
+- Update the Docs overlay event matrix labels from generic trigger click to primary trigger activation. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 68 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`: 1 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`: 236 passed.
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C115: Navigation Disclosure Primary Trigger Parity
+
+Status: completed for this Navigation event parity slice. This pass moves Collapsible and Accordion trigger activation from pointer-press toggling to Web-style primary pointer release, while preserving the existing measured-height open/close animation and keyboard trigger contract.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCollapsible.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexAccordion.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- `CodexCollapsible` was attaching `InputElement.PointerPressedEvent` to the trigger layout and toggling as soon as the primary button was pressed.
+- shadcn/Radix-style disclosure and accordion triggers are button-like surfaces; activation should resolve from primary click/release plus Enter/Space, not from press-down alone.
+- `CodexAccordionItem` inherits the Collapsible trigger template and overrides toggle behavior, so it needed an explicit pointer-release path that reports `CodexAccordionValueChangeSource.Trigger` while guarding disabled item/root states.
+- Docs described the Collapsible trigger as a generic click path and Accordion did not call out primary pointer release, leaving the visible contract less precise than the component behavior.
+
+Implementation targets:
+
+- Replace Collapsible trigger-layout `PointerPressedEvent` wiring with `PointerReleasedEvent` and read `Properties.PointerUpdateKind` before toggling. Status: completed.
+- Add `TryHandleTriggerPointerRelease(PointerUpdateKind updateKind)` to Collapsible, accepting only `PointerUpdateKind.LeftButtonReleased` and returning false when disabled. Status: completed.
+- Override Accordion item pointer release handling so primary release toggles through the Accordion root with source metadata, while disabled items or disabled roots suppress activation. Status: completed.
+- Tighten Collapsible keyboard handling so disabled triggers no longer report successful Enter/Space activation. Status: completed.
+- Update Navigation behavior tests and structure guards for primary-only pointer release, secondary-button suppression, disabled guards, and release-event wiring. Status: completed.
+- Update Docs page notes and event matrices to describe primary trigger activation for Accordion and Collapsible. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 116 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`: 1 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`: 237 passed.
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C116: Dropdown Keyboard Trigger Parity
+
+Status: completed for this popup-trigger keyboard parity slice. This pass adds the missing ArrowDown trigger-open path for Dropdown Button and Split Button menu trigger surfaces, matching the Web DropdownMenu-style keyboard contract while preserving existing primary click, Enter/Space button activation, close-on-select, Escape dismissal, and focus-return behavior.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDropdownButton.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexSplitButton.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+
+Evidence gathered:
+
+- Dropdown Button and Split Button already rely on `CodexButton.Click` for primary pointer release plus Enter/Space activation, but neither trigger had an explicit ArrowDown key path to open the popup.
+- Radix/shadcn dropdown-style triggers support keyboard opening from ArrowDown, so a focused trigger should open the menu without requiring a click-style activation.
+- Split Button separates the primary action and menu trigger; ArrowDown should open only the menu trigger popup and must not run the primary action command.
+- Docs described only generic trigger click/toggle behavior, leaving the keyboard-open contract unclear for both the Forms split-button page and Navigation dropdown page.
+
+Implementation targets:
+
+- Add trigger `KeyDown` wiring to `CodexDropdownButton` so `Key.Down` opens the popup through `TryHandleTriggerKey`. Status: completed.
+- Add menu-trigger `KeyDown` wiring to `CodexSplitButton` so `Key.Down` opens the dropdown through `TryHandleMenuTriggerKey` without invoking the primary action. Status: completed.
+- Preserve existing `CodexButton.Click` activation for primary click and Enter/Space to avoid duplicate toggles. Status: completed.
+- Add behavior tests covering ArrowDown open, non-ArrowDown no-op for the explicit trigger-key helper, loading suppression, missing-content suppression, and primary-action separation. Status: completed.
+- Add structure guards for trigger key handlers and update Docs page notes/event matrices for ArrowDown keyboard opening. Status: completed.
+- Refresh reduced-motion Docs visual fingerprints after the Navigation dropdown event matrix text changed. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 141 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`: 1 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`: 1 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`: 237 passed.
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C117: Menubar Primary Trigger Event Parity
+
+Status: completed for this Menubar trigger parity slice. This pass aligns top-level Menubar trigger activation with the same Web-style primary pointer release rule now used by Dialog, Popover, Collapsible, Accordion, Dropdown, and Split Button trigger surfaces.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexMenubar.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- `CodexMenubarItem.OnPointerReleased` toggled top-level submenu state for any pointer release as long as the item was top-level and had submenu content.
+- Web/Radix menubar triggers are button-like menu triggers; secondary pointer releases should not open or close top-level menus.
+- Menubar keyboard behavior was already explicit through `TryHandleTopLevelNavigationKey`, so the missing parity gap was the pointer release filter.
+- Docs still described a generic top-level trigger click, while the component contract now needs to name primary pointer release consistently with the other trigger families.
+
+Implementation targets:
+
+- Add `TryHandleTopLevelPointerRelease(CodexMenubarItem item, PointerUpdateKind updateKind)` to `CodexMenubar`, accepting only `PointerUpdateKind.LeftButtonReleased`. Status: completed.
+- Route top-level `CodexMenubarItem.OnPointerReleased` through the new helper using `Properties.PointerUpdateKind`, leaving right and middle releases as no-op for menu open/close state. Status: completed.
+- Preserve existing `ToggleMenu`, loading guards, disabled guards, pointer-enter menu switching, and keyboard open/navigation paths. Status: completed.
+- Add behavior tests proving right/middle release does not open or close a top-level menu, left release toggles, and loading suppresses left-release open. Status: completed.
+- Add a structure guard so the top-level pointer path cannot regress to direct `ToggleMenu` without checking `PointerUpdateKind`. Status: completed.
+- Update Docs event matrix text for Menubar primary trigger activation. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 117 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`: 1 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`: 238 passed.
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
 ### Agent C70: Command Filtering, Keyboard Parity, And Docs Cases
 
 Status: completed for this Navigation and Overlay command pass. This slice upgrades `CodexCommand` toward the shadcn/cmdk contract and adds missing Docs cases while preserving the existing per-example inline `Show code` / `Hide code` AXAML workflow.
@@ -1818,6 +2261,2646 @@ Verification:
 
 - `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~ControlStateTests|FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~DocsPanelLayoutTests"`
 
+### Agent C168: Menubar Anatomy Docs Case
+
+Status: completed for this Navigation Docs coverage slice. This pass splits Menubar anatomy out of the broader composition example so the docs page exposes an independent Root/Trigger/Content anatomy case with its own inline `Show code` / `Hide code` AXAML sample.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/MenubarAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- A read-only subAgent audit confirmed `navigation.menubar` had default, states, composition, and interaction examples, but no independent Anatomy example.
+- `BuildInlineExample` already renders the component preview before the local code toggle and `DocsCodeBlock`, so the missing work is registering a distinct sample and builder.
+- Menubar's public composition surface includes root orientation/loop, top-level trigger menus, popup content, labels, groups, separators, shortcut rows, checkbox/radio rows, disabled rows, and nested submenu content.
+
+Implementation targets:
+
+- Add `MenubarAnatomy.axaml` with root/trigger/content, label, group, separator, shortcut, disabled row, checkbox, radio, nested submenu, and vertical menubar anatomy. Status: completed.
+- Add `BuildMenubarAnatomyPreview` and register it under `navigation.menubar` between states and composition. Status: completed.
+- Strengthen Docs panel tests so Menubar anatomy is independently registered and exposes the public primitives directly. Status: completed.
+- Update docs-site Navigation pages in English and Chinese to mention Menubar anatomy coverage. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C169: Resizable Anatomy Docs Case
+
+Status: completed for this Layout Docs coverage slice. This pass adds an independent Resizable anatomy example so `layout.resizable` no longer relies on the composition sample to explain the shadcn-style `PanelGroup`, `Panel`, and `Handle` structure.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Layout/ResizableAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/index.mdx`
+- `docs-site/content/docs/zh/ui-system/index.mdx`
+
+Evidence gathered:
+
+- `layout.resizable` had default, states, composition, and interaction examples, but no standalone Anatomy example.
+- The control and style already expose the required parts: panel group, panels, handles, handle track, visible grip, focus ring, orientation, size, dragging, min/max constraints, and layout summary.
+- Existing Docs inline code plumbing already renders each case before its local code reveal, so this slice only needs a distinct sample, builder, registration, and tests.
+
+Implementation targets:
+
+- Add `ResizableAnatomy.axaml` covering panel group anatomy, visible and hidden handle grips, vertical orientation, and min/max constraints. Status: completed.
+- Add `BuildResizableAnatomyPreview` and register it under `layout.resizable` between states and composition. Status: completed.
+- Strengthen Docs panel tests so Resizable anatomy is independently registered and exposes public `CodexResizablePanelGroup`, `CodexResizablePanel`, and `CodexResizableHandle` primitives. Status: completed.
+- Update docs-site UI overview pages in English and Chinese to mention Resizable anatomy coverage. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C170: Forms Composition Anatomy Docs Cases
+
+Status: completed for this Forms Docs coverage slice. This pass splits anatomy coverage out of composition samples for `forms.button-group`, `forms.input-group`, `forms.input-otp`, and `forms.label` so public structure primitives are visible as their own examples with local inline AXAML source reveal.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/ButtonGroupAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/InputGroupAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/InputOtpAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/LabelAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Evidence gathered:
+
+- A read-only subAgent was launched to audit the four Forms pages while local inspection confirmed each page had default, states, composition, and interaction cases but no standalone Anatomy case.
+- Button Group public anatomy includes root group, connected item positions, text segments, separators, orientation, nested group spacing, and mixed input/select controls.
+- Input Group public anatomy includes root border/focus ring, inline and block addons, input, textarea, text, button, select, intent, and focus-within styling.
+- Input OTP public anatomy includes root text/pattern/max length, groups, slots, separators, active and invalid slots, size, and recovery-code grouping.
+- Label public anatomy includes target association, required marker, access-key text, intent styling, target-disabled styling, and template-owned marker rendering.
+
+Implementation targets:
+
+- Add independent Anatomy AXAML files for Button Group, Input Group, Input OTP, and Label. Status: completed.
+- Add `BuildButtonGroupAnatomyPreview`, `BuildInputGroupAnatomyPreview`, `BuildInputOtpAnatomyPreview`, and `BuildLabelAnatomyPreview`, then register them between states and composition. Status: completed.
+- Strengthen Docs panel tests so these public primitives are independently registered and directly present in copied AXAML samples. Status: completed.
+- Update docs-site Forms pages in English and Chinese to mention the new anatomy split. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint`
+- `npm run build`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C171: Docs Interaction Naming Alignment
+
+Status: completed for this Docs naming and coverage-alignment slice. Read-only subAgents audited the registered Docs cases and confirmed the remaining high-signal drift is not missing rendered controls, but misleading case names that make interaction coverage look absent or attached to the wrong component.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/SonnerInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- `forms.switch` registered `Forms/SwitchStates.axaml` as `Toggle states`, which made the Switch page look like it reused Toggle coverage.
+- `feedback.spinner` registered `Feedback/SpinnerInteraction.axaml` as `Spinner lifecycle`, even though the file and builder are the independent interaction case.
+- `feedback.sonner` had an independent lifecycle case, but the `SonnerLifecycle` filename and builder kept it out of the explicit Interaction naming pattern used by the rest of the inline-expandable gallery.
+- `feedback.skeleton` registered `Feedback/SkeletonInteraction.axaml` as `Skeleton motion`, leaving the interaction sample outside the same public Docs taxonomy.
+
+Implementation targets:
+
+- Rename the Switch states case title to `Switch states`. Status: completed.
+- Rename the Spinner case title to `Spinner interaction` while preserving its existing AXAML and builder. Status: completed.
+- Rename Sonner lifecycle wiring to `Sonner interaction`, `Feedback/SonnerInteraction.axaml`, and `BuildSonnerInteractionPreview`. Status: completed.
+- Rename the Skeleton interaction case title to `Skeleton interaction` while preserving its existing AXAML and builder. Status: completed.
+- Strengthen Docs panel tests so Sonner and Skeleton are guarded as interaction samples. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+
+### Agent C172: Sonner Service Lifecycle Docs Matrix
+
+Status: completed for this Feedback Docs service-lifecycle slice. A read-only feedback Agent confirmed that Sonner is now registered as an interaction case, but its state and event matrices still inherited generic Toast entries rather than documenting the Web-style Sonner service queue contract.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/feedback.mdx`
+- `docs-site/content/docs/zh/ui-system/feedback.mdx`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- `feedback.sonner` renders an inline expandable interaction example, but Sonner behavior is service-driven through `CodexSonnerService` rather than only a single toast's `IsOpen` property.
+- The existing state matrix grouped `feedback.toast` and `feedback.sonner`, so queue insertion, auto-dismiss timers, closing/removal, stacking, rich colors, and close-button visibility were not visible as Sonner-specific review rows.
+- The existing event matrix also grouped `feedback.toast` and `feedback.sonner`, so Show, Dismiss, Clear, option actions, limit trimming, and loading duration behavior were not visible as Sonner-specific event rows.
+
+Implementation targets:
+
+- Split `feedback.sonner` out from generic Toast state rows and document service queue, auto-dismiss, closing, stacking, rich colors, and close visibility. Status: completed.
+- Split `feedback.sonner` out from generic Toast event rows and document Show, Dismiss, Clear, action/cancel, ToastLimit trimming, and loading duration behavior. Status: completed.
+- Strengthen Docs panel tests so the Sonner service lifecycle rows cannot regress back to generic Toast entries. Status: completed.
+- Update docs-site Feedback summaries in English and Chinese to include Sonner service lifecycle review criteria. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint`
+- `npm run build`
+
+### Agent C173: Docs Companion CSharp Source Blocks
+
+Status: completed for this Docs inline-source parity slice. This pass keeps the existing local `Show code` / `Hide code` workflow, but allows a rendered case to expose more than one source block when the preview behavior depends on hidden C# service or event wiring rather than AXAML alone.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/CodexSwitchUI.Docs.csproj`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Docs/DocsPage.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Docs/DocsCodeSamples.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/AlertInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/BadgeInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/AvatarInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/AvatarGroupInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/SonnerInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/ToastInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Overlay/DialogInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Overlay/AlertDialogInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Overlay/SheetInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Overlay/DrawerInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Overlay/CommandDialogInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Overlay/PopoverInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Overlay/TooltipInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Overlay/HoverCardInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/NavigationMenuInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/MenubarInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/CommandInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/TabsInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/BreadcrumbInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/SideNavInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/DropdownButtonInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/MenuInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/ContextMenuInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Primitives/OverlayInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/SelectInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/ComboboxInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/NativeSelectInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/CalendarInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/DatePickerInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Overview/GettingStartedAnatomy.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsRenderedLifecycleTests.cs`
+
+Evidence gathered:
+
+- A read-only audit Agent found that `feedback.sonner` is the highest-priority service-driven Docs page where the rendered preview depends on hidden `CodexSonnerService` calls while the inline source previously showed only the viewport AXAML.
+- The same audit identified follow-up companion-source candidates for Toast, AlertDialog, Dialog, Drawer, Sheet, CommandDialog, Menubar, NavigationMenu, and Command interaction examples.
+- A second read-only audit pass confirmed that `feedback.toast`, `overlay.dialog`, and `overlay.alert-dialog` are the next strongest hidden-C# candidates because their rendered previews exercise command callbacks, dismiss commands, open-change events, focus-return requests, manual close policies, loading suppression, and closed exit state toggles.
+- A focused read-only extraction Agent confirmed that `overlay.sheet`, `overlay.drawer`, and `overlay.command-dialog` also need companion C# because their previews depend on dismiss commands, side/direction switching, manual Escape/outside policies, drag-completion events, close-on-select, item selection metadata, loading suppression, and focus restoration.
+- A Navigation-focused read-only extraction Agent confirmed that `navigation.navigation-menu`, `navigation.menubar`, and `navigation.command` need companion C# because their rendered previews depend on `ActiveItemChanged`, link activation, `ActivateItem`/`CloseViewport`, `ItemSelected`, `ActiveMenuChanged`, `OpenMenu`/`Dismiss`, keyboard navigation, loading suppression, and command `CanExecute` guards.
+- A second Navigation read-only extraction pass confirmed that `navigation.tabs`, `navigation.breadcrumb`, `navigation.side-nav`, `navigation.dropdown`, `navigation.menu`, and `navigation.context-menu` also need companion C# because their rendered previews depend on source-aware `ValueChanged`, `LinkActivated`, `OpenChanged`, restore-focus, close-on-select, menu `ItemSelected`, submenu placement, loading suppression, and command `CanExecute` guards.
+- A focused Overlay/Primitives read-only extraction Agent confirmed that `overlay.popover`, `overlay.tooltip`, `overlay.hover-card`, and `primitives.overlay` need companion C# because their previews depend on `OpenChanged`, `DismissCommand`, focus return, manual Escape/outside policy, provider delay, open/close delays, focus/hover open paths, scrim toggling, and primitive overlay dismiss state.
+- A focused Feedback companion-source audit confirmed that `feedback.alert`, `feedback.badge`, `feedback.avatar`, and `feedback.avatar-group` still needed companion C# because their previews depend on slotted action mutation, slot-presence classes, source-aware badge activation, command-blocked badges, avatar loading lifecycle events, fallback delay changes, stacked/inline group layout, overlap changes, visibility filtering, and group `ItemCount`.
+- A focused Forms select/date companion-source audit confirmed that `forms.select`, `forms.combobox`, `forms.native-select`, `forms.calendar`, and `forms.date-picker` need companion C# because their previews depend on source-aware open/value/selection/input events, keyboard selection, clear/reset, loading suppression, disabled options, selected/range/month/active date events, command-blocked day buttons, and picker range completion.
+- Existing `DocsExampleCase` carried only `SamplePath`, so `BuildInlineExample` could not show the extra C# required to understand service-driven examples.
+
+Implementation targets:
+
+- Add `DocsCodeSnippet` and optional `AdditionalCodeSamples` to `DocsExampleCase` while preserving the default AXAML source block for every existing example. Status: completed.
+- Generalize `DocsCodeSamples.Load` so it can load copied files from `Examples/Axaml` and `Examples/CSharp`. Status: completed.
+- Exclude `Examples/CSharp/**/*.cs` from compilation and copy those samples to the Docs output as selectable source artifacts. Status: completed.
+- Add `Examples/CSharp/Feedback/AlertInteraction.cs` and wire it as a companion source block under the `feedback.alert` interaction case. Status: completed.
+- Add `Examples/CSharp/Feedback/BadgeInteraction.cs` and wire it as a companion source block under the `feedback.badge` interaction case. Status: completed.
+- Add `Examples/CSharp/Feedback/AvatarInteraction.cs` and wire it as a companion source block under the `feedback.avatar` interaction case. Status: completed.
+- Add `Examples/CSharp/Feedback/AvatarGroupInteraction.cs` and wire it as a companion source block under the `feedback.avatar-group` interaction case. Status: completed.
+- Add `Examples/CSharp/Feedback/SonnerInteraction.cs` and wire it as a companion source block under the `feedback.sonner` interaction case. Status: completed.
+- Add `Examples/CSharp/Feedback/ToastInteraction.cs` and wire it as a companion source block under the `feedback.toast` interaction case. Status: completed.
+- Add `Examples/CSharp/Overlay/DialogInteraction.cs` and wire it as a companion source block under the `overlay.dialog` interaction case. Status: completed.
+- Add `Examples/CSharp/Overlay/AlertDialogInteraction.cs` and wire it as a companion source block under the `overlay.alert-dialog` interaction case. Status: completed.
+- Add `Examples/CSharp/Overlay/SheetInteraction.cs` and wire it as a companion source block under the `overlay.sheet` interaction case. Status: completed.
+- Add `Examples/CSharp/Overlay/DrawerInteraction.cs` and wire it as a companion source block under the `overlay.drawer` interaction case. Status: completed.
+- Add `Examples/CSharp/Overlay/CommandDialogInteraction.cs` and wire it as a companion source block under the `overlay.command-dialog` interaction case. Status: completed.
+- Add `Examples/CSharp/Navigation/NavigationMenuInteraction.cs` and wire it as a companion source block under the `navigation.navigation-menu` interaction case. Status: completed.
+- Add `Examples/CSharp/Navigation/MenubarInteraction.cs` and wire it as a companion source block under the `navigation.menubar` interaction case. Status: completed.
+- Add `Examples/CSharp/Navigation/CommandInteraction.cs` and wire it as a companion source block under the `navigation.command` interaction case. Status: completed.
+- Add `Examples/CSharp/Navigation/TabsInteraction.cs` and wire it as a companion source block under the `navigation.tabs` interaction case. Status: completed.
+- Add `Examples/CSharp/Navigation/BreadcrumbInteraction.cs` and wire it as a companion source block under the `navigation.breadcrumb` interaction case. Status: completed.
+- Add `Examples/CSharp/Navigation/SideNavInteraction.cs` and wire it as a companion source block under the `navigation.side-nav` interaction case. Status: completed.
+- Add `Examples/CSharp/Navigation/DropdownButtonInteraction.cs` and wire it as a companion source block under the `navigation.dropdown` interaction case. Status: completed.
+- Add `Examples/CSharp/Navigation/MenuInteraction.cs` and wire it as a companion source block under the `navigation.menu` interaction case. Status: completed.
+- Add `Examples/CSharp/Navigation/ContextMenuInteraction.cs` and wire it as a companion source block under the `navigation.context-menu` interaction case. Status: completed.
+- Add `Examples/CSharp/Overlay/PopoverInteraction.cs` and wire it as a companion source block under the `overlay.popover` interaction case. Status: completed.
+- Add `Examples/CSharp/Overlay/TooltipInteraction.cs` and wire it as a companion source block under the `overlay.tooltip` interaction case. Status: completed.
+- Add `Examples/CSharp/Overlay/HoverCardInteraction.cs` and wire it as a companion source block under the `overlay.hover-card` interaction case. Status: completed.
+- Add `Examples/CSharp/Primitives/OverlayInteraction.cs` and wire it as a companion source block under the `primitives.overlay` interaction case. Status: completed.
+- Add `Examples/CSharp/Forms/SelectInteraction.cs` and wire it as a companion source block under the `forms.select` interaction case. Status: completed.
+- Add `Examples/CSharp/Forms/ComboboxInteraction.cs` and wire it as a companion source block under the `forms.combobox` interaction case. Status: completed.
+- Add `Examples/CSharp/Forms/NativeSelectInteraction.cs` and wire it as a companion source block under the `forms.native-select` interaction case. Status: completed.
+- Add `Examples/CSharp/Forms/CalendarInteraction.cs` and wire it as a companion source block under the `forms.calendar` interaction case. Status: completed.
+- Add `Examples/CSharp/Forms/DatePickerInteraction.cs` and wire it as a companion source block under the `forms.date-picker` interaction case. Status: completed.
+- Update the Docs overview anatomy sample to describe per-case source blocks rather than a single AXAML-only block. Status: completed.
+- Strengthen static and rendered Docs tests so companion C# source blocks remain copyable and do not break the expanded-code gallery. Status: completed.
+
+Follow-up audit queue:
+
+- No Feedback, Overlay, Navigation, Primitive, or Forms select/date hidden-behavior candidates remain in this tracked companion-source batch.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+
+### Agent C174: Forms Control Companion CSharp Source Blocks
+
+Status: completed for this Forms companion-source pass. This pass extends the per-case inline source reveal from AXAML-only interaction examples to include the C# event wiring for the remaining high-risk Forms controls whose Docs previews depend on hidden checked, pressed, value, and commit handlers.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/CheckboxInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/RadioInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/RadioGroupInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/SwitchInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/ToggleInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/ToggleGroupInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/SliderInteraction.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- A focused read-only audit pass confirmed that `forms.checkbox`, `forms.radio`, `forms.radio-group`, `forms.switch`, `forms.toggle`, `forms.toggle-group`, and `forms.slider` still rendered interaction behavior from hidden C# while the local inline code reveal showed only AXAML.
+- The hidden preview wiring covers `CheckedStateChanged`, `Checked`, `ValueChanged`, `CheckedChanged`, `PressedChanged`, `ValueChanging`, `ValueCommitted`, source metadata, three-state cycling, programmatic state changes, disabled guards, loading suppression, roving keys, loop boundaries, multiple selection, vertical orientation, and slider commit paths.
+- Existing `DocsExampleCase.CodeSamples` already supports multiple source blocks per rendered case, so this pass only needed companion files plus `Code(...)` registration.
+
+Implementation targets:
+
+- Add and wire `Examples/CSharp/Forms/CheckboxInteraction.cs` under the `forms.checkbox` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/RadioInteraction.cs` under the `forms.radio` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/RadioGroupInteraction.cs` under the `forms.radio-group` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/SwitchInteraction.cs` under the `forms.switch` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/ToggleInteraction.cs` under the `forms.toggle` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/ToggleGroupInteraction.cs` under the `forms.toggle-group` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/SliderInteraction.cs` under the `forms.slider` interaction case. Status: completed.
+- Strengthen Docs static tests so these companion C# files remain registered, copied, and content-checked. Status: completed.
+- Refresh Docs visual fingerprints after expanded inline source gained additional C# blocks. Status: completed.
+
+Follow-up audit queue:
+
+- Continue companion C# coverage for Data Display interaction examples that still depend on hidden pointer, command, selection, paging, carousel, or chart refresh handlers.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C175: Layout Companion CSharp Source Blocks
+
+Status: completed for this Layout companion-source pass. This pass extends the per-case inline source reveal for Layout interaction examples so shell, sidebar, section, and resizable behavior can be understood from the local `Show code` block instead of only from hidden Docs C# preview wiring.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Layout/ApplicationShellInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Layout/SidebarInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Layout/SidebarPrimitivesInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Layout/SectionInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Layout/ResizableInteraction.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- A focused read-only Layout audit confirmed that `layout.application-shell`, `layout.sidebar`, `layout.sidebar-primitives`, `layout.section`, and `layout.resizable` still rendered interaction behavior from hidden C# while their local inline source reveal showed only AXAML.
+- The hidden preview wiring covers sidebar active row selection, sibling clearing, badge updates, provider `OpenChanged`, `TryHandleShortcut`, trigger/rail command blocking, hover actions, nested row activation, section title/description/action/content slot mutation, resizable `LayoutChanged`, `ResizeHandleByPercent`, keyboard resize, vertical orientation, and min/max clamp behavior.
+- Existing multi-source `DocsExampleCase.CodeSamples` support made this a registration and companion-file pass rather than a Docs shell change.
+
+Implementation targets:
+
+- Add and wire `Examples/CSharp/Layout/ApplicationShellInteraction.cs` under the `layout.application-shell` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Layout/SidebarInteraction.cs` under the `layout.sidebar` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Layout/SidebarPrimitivesInteraction.cs` under the `layout.sidebar-primitives` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Layout/SectionInteraction.cs` under the `layout.section` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Layout/ResizableInteraction.cs` under the `layout.resizable` interaction case. Status: completed.
+- Strengthen Docs static tests so these Layout companion C# files remain registered, copied, and content-checked. Status: completed.
+
+Follow-up audit queue:
+
+- Continue companion C# coverage for Data Display and chart interaction examples that still depend on hidden pointer, command, carousel, pagination, table, or chart refresh handlers.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C176: Data Display Companion CSharp Source Blocks
+
+Status: completed for this Data Display companion-source pass. This pass extends the per-case inline source reveal for event-heavy Data Display interaction examples so the local `Show code` block includes both the visible AXAML scaffold and the C# event, command, and state wiring that drives the rendered preview.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/CardInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/ItemInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/CarouselInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/ProviderCardInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/PaginationInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/TableInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/DataTableInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/PinnedTableInteraction.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- A bounded read-only Agent audit was attempted for the Data Display interaction previews; it confirmed the `Examples/CSharp/DataDisplay` gap, but was terminated after it began dumping large source context instead of a concise checklist.
+- Focused source reads confirmed that Card, Item, Carousel, ProviderCard, Pagination, Table, DataTable, and PinnedTable interaction cases still depended on hidden Docs C# for pointer release, source-aware events, command guards, selection, pagination, table transition keys, and pinned-table refresh/density behavior.
+- Existing multi-source `DocsExampleCase.CodeSamples` support made this a companion-file and registration pass, preserving the rule that each rendered component appears first and its local code expands directly underneath.
+
+Implementation targets:
+
+- Add and wire `Examples/CSharp/DataDisplay/CardInteraction.cs` under the `data.card` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/ItemInteraction.cs` under the `data.item` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/CarouselInteraction.cs` under the `data.carousel` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/ProviderCardInteraction.cs` under the `data.provider-card` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/PaginationInteraction.cs` under the `data.pagination` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/TableInteraction.cs` under the `data.table` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/DataTableInteraction.cs` under the `data.data-table` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/PinnedTableInteraction.cs` under the `data.pinned-table` interaction case. Status: completed.
+- Strengthen Docs static tests so these Data Display companion C# files remain registered, copied, and content-checked. Status: completed.
+
+Follow-up audit queue:
+
+- Continue companion C# coverage for the remaining Data Display chart/metric/image/scroll interaction examples that still depend on hidden refresh, lifecycle, tooltip, or active-item handlers.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C177: Remaining Data Display Companion CSharp Source Blocks
+
+Status: completed for this remaining Data Display companion-source pass. This pass closes the interaction-code gap left after C176 by wiring the chart, metric, image, scroll, aspect-ratio, and trend cases to local C# source blocks under their own `Show code` toggles.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/AspectRatioInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/ChartInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/BarChartInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/LineChartInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/MetricInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/ImageIconInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/ScrollAreaInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/RankedBarChartInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/UsagePieChartInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/DataDisplay/UsageTrendChartInteraction.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- Current-source audit showed these remaining `DataDisplay/*Interaction.axaml` cases still rendered behavior from hidden Docs C# while their local source reveal showed only AXAML.
+- A very narrow read-only Agent was launched for these 10 methods, but it produced an empty output file; current source and control API reads were used as authoritative evidence instead.
+- The missing hidden behavior covered `RatioChanged`, chart refresh and tooltip/legend state, bar/line active item events, metric slot mutation, image load/error lifecycle, scroll metrics and boundaries, ranked/usage active item events, and trend refresh/granularity/empty-state changes.
+
+Implementation targets:
+
+- Add and wire `Examples/CSharp/DataDisplay/AspectRatioInteraction.cs` under the `data.aspect-ratio` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/ChartInteraction.cs` under the `data.chart` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/BarChartInteraction.cs` under the `data.bar-chart` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/LineChartInteraction.cs` under the `data.line-chart` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/MetricInteraction.cs` under the `data.metric` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/ImageIconInteraction.cs` under the `data.image-icon` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/ScrollAreaInteraction.cs` under the `data.scroll-area` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/RankedBarChartInteraction.cs` under the `data.ranked-bar-chart` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/UsagePieChartInteraction.cs` under the `data.usage-pie-chart` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/DataDisplay/UsageTrendChartInteraction.cs` under the `data.usage-trend-chart` interaction case. Status: completed.
+- Strengthen Docs static tests so every Data Display interaction companion C# file remains registered, copied, and content-checked. Status: completed.
+
+Follow-up audit queue:
+
+- Audit the remaining non-DataDisplay interaction pages for hidden C# behavior, especially Forms basic text/button/input cases, Feedback loading surfaces, Navigation simple disclosure cases, Primitives, and Tokens.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C178: Forms Foundation Companion CSharp Source Blocks
+
+Status: completed for this Forms foundation companion-source pass. This pass closes the hidden C# source gap for the high-traffic basic form controls: buttons, grouped buttons, input groups, OTP input, labels, icon buttons, split buttons, fields, text boxes, and textareas now expose their event and state wiring directly under each rendered `Interaction` example.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/ButtonInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/ButtonGroupInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/InputGroupInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/InputOtpInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/LabelInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/IconButtonInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/SplitButtonInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/FieldInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/TextBoxInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Forms/TextareaInteraction.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- Current-source audit showed these `Forms/*Interaction.axaml` cases still rendered behavior from hidden Docs C# while the local inline source reveal showed only AXAML.
+- The hidden behavior covered button click/command activation, loading suppression, command-blocked states, grouped child activation, input-group add-on button activation, OTP insertion and active-slot movement, label target association, icon-button loading and round state, split-button `OpenChanged` and focus restore, field validation handoff, and text input `TextChanged` / selection / read-only / disabled paths.
+- A first read-only Agent invocation failed because the local `codex exec` did not support the requested `--ask-for-approval` flag; a corrected read-only Agent audit was launched after implementation to verify this specific Forms foundation registration/file set.
+- Existing multi-source `DocsExampleCase.CodeSamples` support made this a companion-file and registration pass while preserving the user-required order: component preview first, local `Show code` / `Hide code`, then copyable code blocks.
+
+Implementation targets:
+
+- Add and wire `Examples/CSharp/Forms/ButtonInteraction.cs` under the `forms.button` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/ButtonGroupInteraction.cs` under the `forms.button-group` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/InputGroupInteraction.cs` under the `forms.input-group` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/InputOtpInteraction.cs` under the `forms.input-otp` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/LabelInteraction.cs` under the `forms.label` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/IconButtonInteraction.cs` under the `forms.icon-button` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/SplitButtonInteraction.cs` under the `forms.split-button` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/FieldInteraction.cs` under the `forms.field` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/TextBoxInteraction.cs` under the `forms.textbox` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Forms/TextareaInteraction.cs` under the `forms.textarea` interaction case. Status: completed.
+- Strengthen Docs static tests so these Forms companion C# files remain registered, copied, and content-checked. Status: completed.
+
+Follow-up audit queue:
+
+- Continue companion C# coverage for Feedback loading surfaces (`EmptyState`, `Spinner`, `Progress`, `Skeleton`), Navigation simple disclosure/support primitives (`SegmentedControl`, `Accordion`, `Collapsible`, `Separator`, `Kbd`), Primitives (`Typography`, `FocusRing`, `Direction`), and Tokens Motion.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C179: Feedback Loading Companion CSharp Source Blocks
+
+Status: completed for this Feedback loading companion-source pass. This pass closes the hidden C# source gap for `EmptyState`, `Spinner`, `Progress`, and `Skeleton` interaction examples so their action events, loading guards, reduced-motion settings, and animation toggles are visible under each local `Show code` block.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/EmptyStateInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/SpinnerInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/ProgressInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Feedback/SkeletonInteraction.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- Current-source audit showed `feedback.empty-state`, `feedback.spinner`, `feedback.progress`, and `feedback.skeleton` still rendered interaction behavior from hidden Docs C# while their local inline source reveal showed only AXAML.
+- A focused read-only Agent independently reported these four loading interaction cases as `MISSING` before implementation: no `Code("Feedback/...Interaction.cs", "CSharp/Feedback/...Interaction.cs")` registration and no corresponding C# sample files.
+- The missing hidden behavior covered `ActionRequested`, `SecondaryActionRequested`, command `CanExecute` guards, loading/disabled suppression, spinner `IsActive` and `RotationDuration`, progress determinate value changes and `IndeterminateAnimationDuration`, and skeleton `IsAnimated`, `PulseDuration`, pulse opacity, shimmer opacity, and static reduced-motion fallback.
+- Existing multi-source `DocsExampleCase.CodeSamples` support made this a companion-file and registration pass while preserving the user-required order: component preview first, local `Show code` / `Hide code`, then copyable code blocks.
+
+Implementation targets:
+
+- Add and wire `Examples/CSharp/Feedback/EmptyStateInteraction.cs` under the `feedback.empty-state` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Feedback/SpinnerInteraction.cs` under the `feedback.spinner` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Feedback/ProgressInteraction.cs` under the `feedback.progress` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Feedback/SkeletonInteraction.cs` under the `feedback.skeleton` interaction case. Status: completed.
+- Strengthen Docs static tests so these Feedback loading companion C# files remain registered, copied, and content-checked. Status: completed.
+
+Follow-up audit queue:
+
+- Continue companion C# coverage for Navigation simple disclosure/support primitives (`SegmentedControl`, `Accordion`, `Collapsible`, `Separator`, `Kbd`), Primitives (`Typography`, `FocusRing`, `Direction`), and Tokens Motion.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C180: Navigation Simple Companion CSharp Source Blocks
+
+Status: completed for this Navigation simple companion-source pass. This pass closes the hidden C# source gap for `SegmentedControl`, `Accordion`, `Collapsible`, `Separator`, and `Kbd` interaction examples so their source-aware events, programmatic state changes, disabled guards, and reduced-motion examples are visible under each rendered `Show code` block.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/SegmentedControlInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/AccordionInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/CollapsibleInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/SeparatorInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Navigation/KbdInteraction.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- Current-source audit showed these `Navigation/*Interaction.axaml` cases rendered behavior from hidden Docs C# while the local inline source reveal showed only AXAML.
+- A focused read-only Agent independently reported all five interaction cases as `MISSING` before implementation: no `Code("Navigation/...Interaction.cs", "CSharp/Navigation/...Interaction.cs")` registration and no corresponding C# sample files.
+- A post-implementation read-only Agent confirmed all five registrations and files exist, with only whitespace-sensitive `IsEnabled=false` checks reported as exact-string misses because the samples use normal C# formatting (`IsEnabled = false`).
+- Existing multi-source `DocsExampleCase.CodeSamples` support made this a companion-file and registration pass while preserving the user-required order: component preview first, local `Show code` / `Hide code`, then copyable code blocks.
+
+Implementation targets:
+
+- Add and wire `Examples/CSharp/Navigation/SegmentedControlInteraction.cs` under the `navigation.segmented-control` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Navigation/AccordionInteraction.cs` under the `navigation.accordion` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Navigation/CollapsibleInteraction.cs` under the `navigation.collapsible` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Navigation/SeparatorInteraction.cs` under the `navigation.separator` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Navigation/KbdInteraction.cs` under the `navigation.kbd` interaction case. Status: completed.
+- Strengthen Docs static tests so these Navigation companion C# files remain registered, copied, and content-checked. Status: completed.
+
+Follow-up audit queue:
+
+- Primitives (`Typography`, `FocusRing`, `Direction`) and Tokens Motion companion coverage is closed by C181; continue broader Web-parity audits for default style leakage, event source metadata, and animation fidelity.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C181: Primitives And Tokens Companion CSharp Source Blocks
+
+Status: completed for this Primitives/Tokens companion-source pass. This pass closes the hidden C# source gap for `Typography`, `FocusRing`, `Direction`, and `Motion` interaction examples so role switching, focus-ring geometry, direction events, runtime motion helpers, and reduced-motion handoff are visible under each rendered `Show code` block.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Primitives/TypographyInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Primitives/FocusRingInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Primitives/DirectionInteraction.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/CSharp/Tokens/MotionInteraction.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- Current-source audit showed `primitives.typography`, `primitives.focus-ring`, `primitives.direction`, and `tokens.motion` rendered interaction behavior from hidden Docs C# while the local inline source reveal showed only AXAML.
+- A focused read-only Agent independently reported all four interaction cases as `MISSING` before implementation: no `Code("Primitives/...Interaction.cs", "CSharp/Primitives/...Interaction.cs")` / `Code("Tokens/MotionInteraction.cs", "CSharp/Tokens/MotionInteraction.cs")` registration and no corresponding C# sample files.
+- `Examples/CSharp/Primitives` previously contained only `OverlayInteraction.cs`; `Examples/CSharp/Tokens` did not exist before this pass.
+- Existing multi-source `DocsExampleCase.CodeSamples` support made this a companion-file and registration pass while preserving the user-required order: component preview first, local `Show code` / `Hide code`, then copyable code blocks.
+
+Implementation targets:
+
+- Add and wire `Examples/CSharp/Primitives/TypographyInteraction.cs` under the `primitives.typography` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Primitives/FocusRingInteraction.cs` under the `primitives.focus-ring` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Primitives/DirectionInteraction.cs` under the `primitives.direction` interaction case. Status: completed.
+- Add and wire `Examples/CSharp/Tokens/MotionInteraction.cs` under the `tokens.motion` interaction case. Status: completed.
+- Strengthen Docs static tests so these Primitives/Tokens companion C# files remain registered, copied, and content-checked. Status: completed.
+
+Follow-up audit queue:
+
+- Continue broader Web-parity audits for default style leakage, event source metadata, animation fidelity, and missing component/chart coverage beyond this companion-code slice.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C182: AvatarGroup Independent Style Architecture
+
+Status: completed for this component architecture and style-fidelity slice. This pass promotes `CodexAvatarGroup` from a top-level control whose styles were hidden inside `Avatar.axaml` into an independently included style file, matching the component-per-style-file architecture used by the rest of the library and making future default-style leakage guards cover AvatarGroup directly.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Avatar.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/AvatarGroup.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/ComponentStyles.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ControlStateTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- `ExpectedTopLevelControls` already listed `CodexAvatarGroup`, but the shared `Components` style-file guard did not include `AvatarGroup`, so `EveryComponentHasOwnStyleFileAndThemeInclude` could not catch missing AvatarGroup style registration.
+- `CodexAvatarGroup` and `CodexAvatarGroupCount` styles lived inside `Themes/Controls/Avatar.axaml`, while `ComponentStyles.axaml` included only `Avatar.axaml`; this made AvatarGroup an architectural exception compared with other first-class components.
+- `ControlStateTests` still mapped `CodexAvatarGroup` and `CodexAvatarGroupCount` size selector checks to the `Avatar` style file, proving the state matrix was coupled to the old hidden-style placement.
+- A read-only style-leak Agent was launched with a broad default-style leakage audit prompt. It ran long and was stopped to avoid a dangling process; its partial output independently highlighted raw native-part risk areas, while this slice closed the local AvatarGroup style architecture gap found during the same audit pass.
+
+Implementation targets:
+
+- Move all `CodexAvatarGroup`, `CodexAvatarGroupCount`, `avatar-group-item`, size, disabled, count-surface, and transition selectors into a new `Themes/Controls/AvatarGroup.axaml`. Status: completed.
+- Add `Themes/Controls/AvatarGroup.axaml` to `ComponentStyles.axaml` so AvatarGroup styles are loaded through the same component style registry as other controls. Status: completed.
+- Add `AvatarGroup` to the shared component style-file guard so it must keep its own style file and theme include. Status: completed.
+- Update size selector tests so `CodexAvatarGroup` and `CodexAvatarGroupCount` validate against `AvatarGroup.axaml` instead of `Avatar.axaml`. Status: completed.
+- Add a focused style-fidelity test proving Avatar no longer contains AvatarGroup selectors and AvatarGroup owns count chrome, motion tokens, size selectors, disabled state, and no Fluent/BasedOn path. Status: completed.
+
+Follow-up audit queue:
+
+- DatePicker/Combobox trigger and clear button scoped chrome is closed by C183; continue the raw native-part style audit for overlay close buttons and scoped ScrollViewer templates.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~ComponentStructureTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ControlStateTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C183: DatePicker And Combobox Raw Button Chrome Guards
+
+Status: completed for this raw native-part style-fidelity slice. This pass closes the DatePicker/Combobox trigger and clear-button audit item by ensuring their embedded raw Avalonia `Button` parts are scoped, templated, token-animated, and state-guarded instead of relying on default Button chrome.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/DatePicker.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Combobox.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- Both `DatePicker.axaml` and `Combobox.axaml` intentionally use raw `Button` controls for `PART_Trigger` and `PART_Clear`, with custom `ControlTemplate TargetType="Button"` definitions to avoid default Fluent chrome.
+- `Combobox.axaml` already had scoped base transitions for `Button#PART_Clear` and `Button#PART_Trigger`, while `DatePicker.axaml` did not, so the DatePicker trigger/clear buttons could regress without a dedicated button-level motion contract.
+- Neither file previously had a shared test proving that raw trigger/clear Button parts stayed scoped, templated, transition-backed, and free of unscoped `Button#PART_Clear` / `Button#PART_Trigger` selectors.
+- A focused read-only Agent was launched for DatePicker/Combobox raw-button leakage. It ran long and was stopped to avoid a dangling process; its partial output independently highlighted the same raw-button selector/state blind spot.
+
+Implementation targets:
+
+- Add scoped `CodexDatePicker /template/ Button#PART_Clear` and `Button#PART_Trigger` transitions using Codex motion tokens. Status: completed.
+- Add scoped DatePicker `PART_ClearSurface` / `PART_TriggerSurface` brush transitions and icon transitions for `PART_CalendarIcon`, `PART_ClearIcon`, and `PART_Chevron`, including chevron transform motion. Status: completed.
+- Add DatePicker clear-button pointerover and pressed surface states so the embedded clear action has Web-style hover/pressed feedback. Status: completed.
+- Add scoped Combobox `PART_ClearSurface` / `PART_TriggerSurface` brush transitions, `PART_ClearIcon` foreground motion, and clear-button pointerover/pressed surface states. Status: completed.
+- Add a focused static guard proving DatePicker and Combobox raw Button parts are templated, scoped to their owner component, motion-backed, and not using unscoped Button selectors or Fluent/BasedOn defaults. Status: completed.
+
+Follow-up audit queue:
+
+- Continue raw native-part style audits for overlay close buttons (`Dialog`, `Popover`, `Sheet`, `Drawer`, `CommandDialog`, `Toast`) and scoped ScrollViewer templates.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~ComponentStructureTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~ControlStateTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C184: Overlay Close Raw Button Chrome Guards
+
+Status: completed for this overlay/feedback close-button style-fidelity slice. This pass closes the next raw native-part audit item by keeping overlay close buttons scoped to their owner components with Web-style hover, pressed, custom content, and tokenized motion instead of letting raw Avalonia `Button` chrome leak through.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Popover.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Toast.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/CommandDialog.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- A focused read-only Agent was launched for overlay/feedback close raw-button leakage across `Dialog`, `Popover`, `Sheet`, `Drawer`, `CommandDialog`, `Toast`, and `Sonner`. It confirmed the local audit direction before being stopped to avoid a dangling process.
+- `Dialog`, `Sheet`, `Drawer`, and `CommandDialog` already had scoped `Button#PART_Close:pointerover` and `Button#PART_Close:pressed`; `Popover` and `Toast` only had pointerover, so pressed feedback was missing for two shadcn-style dismiss actions.
+- `Popover` and `Toast` also lacked button-level close transitions, so hover/pressed feedback could regress without an owner-scoped motion contract.
+- `CommandDialog` inherits Dialog close-content APIs but its custom close template did not name `PART_CloseIcon` / `PART_CloseContent` or bind inherited `CloseContent`, making custom close content inconsistent with other overlay surfaces.
+
+Implementation targets:
+
+- Add scoped Popover and Toast close-button transitions using `CodexSwitch.MotionDurationDefault` and `CodexSwitch.MotionEaseOut`. Status: completed.
+- Add Popover and Toast `Button#PART_Close:pressed` opacity feedback to match Dialog, Sheet, Drawer, and CommandDialog. Status: completed.
+- Align CommandDialog close template with the shared overlay anatomy by naming `PART_CloseIcon`, adding `PART_CloseContent`, binding inherited `CloseContent`, adding close-button transitions, and adding `has-close-content` icon/content swaps. Status: completed.
+- Add a focused static guard proving Dialog, Popover, Sheet, Drawer, CommandDialog, and Toast close buttons are templated, owner-scoped, hover/pressed state-backed, motion-backed, close-content capable, and free of unscoped `Button#PART_Close` selectors or Fluent/BasedOn defaults. Status: completed.
+
+Follow-up audit queue:
+
+- Continue raw native-part style audits for scoped ScrollViewer templates and other embedded native parts, then return to Docs case-density work for components that still have too few independent AXAML examples.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~ComponentStructureTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C185: Dropdown List ScrollViewer Chrome Guards
+
+Status: completed for this Forms popup-scroll style-fidelity slice. This pass starts the scoped ScrollViewer audit by moving the most visible dropdown list scrollbars in `Select`, `NativeSelect`, and `Combobox` off default Avalonia chrome and onto owner-scoped Web-style ScrollViewer, ScrollBar, Track, and Thumb templates.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Select.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/NativeSelect.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Combobox.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs/ui-web-parity-agent-plan.md`
+
+Evidence gathered:
+
+- `ScrollArea.axaml` and `Table.axaml` already own scoped `ScrollViewer`, `ScrollBar`, and `Thumb` templates, proving the local Web-style scrollbar pattern and motion contract.
+- A focused read-only Agent was launched for embedded `ScrollViewer` / `ScrollBar` leakage. Its partial audit identified `Select`, `NativeSelect`, `Combobox`, `Command`, `Menubar`, `ContextMenu`, `Drawer`, and `ApplicationShell` as remaining raw ScrollViewer sites, while `ScrollArea` and `Table` already have custom templates.
+- The dropdown list cluster is the highest-risk first slice because overflow popups expose visible scrollbars directly beside shadcn-style option rows; default platform scrollbars break hover, pressed, radius, opacity, and motion consistency even when item templates are correct.
+
+Implementation targets:
+
+- Name the Select and NativeSelect popup list scroll viewers `PART_Scroll`, matching Combobox's existing `PART_Scroll` part. Status: completed.
+- Add owner-scoped `ScrollViewer#PART_Scroll` templates for Select, NativeSelect, and Combobox with `PART_ScrollRoot`, `PART_ContentPresenter`, horizontal/vertical scrollbars, corner surface, gesture recognizer, and transparent background. Status: completed.
+- Add owner-scoped vertical and horizontal `ScrollBar` templates with hidden page buttons, track, thumb, and Web-style 10px rails. Status: completed.
+- Add owner-scoped `Thumb#PART_Thumb` templates with `PART_ThumbSurface`, muted foreground color, rounded radius, hover foreground promotion, opacity feedback, and tokenized opacity/background transitions. Status: completed.
+- Add a focused static guard proving the three dropdown list scroll viewers are named, templated, motion-backed, owner-scoped, and free of unscoped `ScrollViewer` / `ScrollBar` selectors or Fluent/BasedOn defaults. Status: completed.
+
+Follow-up audit queue:
+
+- Continue scoped ScrollViewer audits for Command list, Menubar/ContextMenu submenu surfaces, Drawer content scrolling, ApplicationShell navigation scrolling, and text-input scroll presenters.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~ComponentStructureTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~ControlStateTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` from `docs-site/`
+- `npm run build` from `docs-site/`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C163: Item Activated Source Metadata
+
+Status: completed for this Data Display event-parity pass. This slice makes `CodexItem.Activated` report whether activation came from programmatic calls, pointer release, or keyboard activation, matching the source-aware event model already used by Tabs, Breadcrumb, Command, Pagination, and popup controls.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexItem.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs-site/content/docs/en/ui-system/data-display.mdx`
+- `docs-site/content/docs/zh/ui-system/data-display.mdx`
+
+Evidence gathered:
+
+- `CodexItem` already routed programmatic, Enter/Space, and primary pointer release through a single guarded activation path, but `CodexItemActivatedEventArgs` exposed only `CommandParameter`.
+- Nested action suppression and command guard semantics were already present, so this pass only needed source metadata rather than a larger row-behavior rewrite.
+- Docs Item interaction examples already expose status text for activation feedback and the page already participates in the inline `Show code` / `Hide code` contract.
+
+Implementation targets:
+
+- Add `CodexItemActivationSource` with `Programmatic`, `Pointer`, and `Keyboard`. Status: completed.
+- Extend `CodexItemActivatedEventArgs` with `Source` while keeping the existing `CommandParameter`. Status: completed.
+- Route `TryActivate()`, `TryHandleActivationKey(...)`, and primary pointer release activation through the shared guard path with the correct source. Status: completed.
+- Update Docs Item notes, event matrix, and live status text to show activation source metadata. Status: completed.
+- Update docs-site Data Display pages in English and Chinese to document `Activated` source metadata. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+
+### Agent C164: Provider Card Selected Source Metadata
+
+Status: completed for this Data Display event-parity pass. This slice gives provider-row selection the same source-aware event shape as the adjacent Item, Command, Breadcrumb, Tabs, Pagination, and popup controls.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexProviderCard.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/ProviderCardInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ControlStateTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/data-display.mdx`
+- `docs-site/content/docs/zh/ui-system/data-display.mdx`
+
+Evidence gathered:
+
+- A read-only Agent audit confirmed `CodexItem` was now source-aware and identified `CodexProviderCard` as the adjacent Data Display gap: active state changed, but consumers could not observe whether selection came from pointer, keyboard, or programmatic activation.
+- Existing provider-card behavior already guarded selection through enabled, dragging, and command `CanExecute`, and already restricted pointer selection to left-button release.
+- Because `CodexProviderCard` inherits `Button`, the implementation needed to preserve native `Click` / `Command` order while adding selection metadata after the selection guard passes.
+
+Implementation targets:
+
+- Add `CodexProviderCardSelectionSource` with `Programmatic`, `Pointer`, and `Keyboard`. Status: completed.
+- Add `CodexProviderCardSelectedEventArgs` and `Selected` so consumers can observe source metadata plus the existing command parameter. Status: completed.
+- Route `TrySelect()`, primary pointer release selection, and keyboard-triggered button clicks through source-aware selection without changing command guards. Status: completed.
+- Update Docs Provider Card notes, event matrix, interaction preview status, and AXAML interaction copy to mention source metadata. Status: completed.
+- Update docs-site Data Display pages in English and Chinese to document `Selected` source metadata. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ControlStateTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+
+### Agent C165: Badge Activated Source Metadata
+
+Status: completed for this Feedback event-parity pass. This slice gives interactive/link badges the same source-aware activation shape as Item, Provider Card, Breadcrumb, Command, and other Web-style trigger surfaces.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexBadge.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/BadgeInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/feedback.mdx`
+- `docs-site/content/docs/zh/ui-system/feedback.mdx`
+
+Evidence gathered:
+
+- `CodexBadge` already had guarded activation, command `CanExecute` handling, keyboard activation, and primary pointer release filtering, but `CodexBadgeActivatedEventArgs` exposed only `CommandParameter`.
+- Docs already described interactive/link badges as pointer and keyboard activatable, so the event args needed source metadata to match the Web-style trigger contract instead of only updating visible state.
+
+Implementation targets:
+
+- Add `CodexBadgeActivationSource` with `Programmatic`, `Pointer`, and `Keyboard`. Status: completed.
+- Extend `CodexBadgeActivatedEventArgs` with `Source` while keeping `CommandParameter`. Status: completed.
+- Route `TryActivate()`, `TryHandlePointerActivation(...)`, and Enter/Space through the same guard path with the correct source. Status: completed.
+- Update Badge Docs notes, event matrix, interaction status text, and AXAML interaction copy to mention source-aware activation. Status: completed.
+- Update docs-site Feedback pages in English and Chinese to document `Activated` source metadata. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+
+### Agent C166: Calendar Anatomy Docs Case
+
+Status: completed for this Docs coverage pass. This slice closes the `forms.calendar` gap identified by the read-only Docs audit: Calendar had states, composition, and interaction cases, but no independent anatomy example with its own AXAML source.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/CalendarAnatomy.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Evidence gathered:
+
+- Docs already use `BuildInlineExample` so every registered example renders before its local `Show code` / `Hide code` source block.
+- The Calendar page had `CalendarStates.axaml`, `CalendarComposition.axaml`, and `CalendarInteraction.axaml`, but no `CalendarAnatomy.axaml`.
+- Existing Calendar state/event matrices already name the anatomy-relevant states: outside days, week numbers, range edges, unavailable days, and active roving target.
+
+Implementation targets:
+
+- Add `CalendarAnatomy.axaml` as a standalone sample file. Status: completed.
+- Register `Calendar anatomy` in `ExampleCasesFor("forms.calendar")` between states and composition. Status: completed.
+- Add `BuildCalendarAnatomyPreview` covering single grid anatomy, range anatomy, week-number anatomy, and bounded day anatomy. Status: completed.
+- Update Docs panel tests so the Calendar anatomy sample and preview builder are guarded by the inline-code case registry. Status: completed.
+- Update docs-site Forms pages in English and Chinese to document Calendar's separate state/anatomy/composition/interaction coverage. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+
+### Agent C167: Native Select Anatomy Docs Case
+
+Status: completed for this Docs coverage pass. This slice closes the `forms.native-select` anatomy gap from the read-only Docs audit and tightens the structure tests so the example documents real template parts rather than only adding another state sample.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/NativeSelectAnatomy.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Evidence gathered:
+
+- `forms.native-select` had states, composition, and interaction examples, but no independent anatomy example.
+- The Native Select template owns trigger, focus ring, placeholder, selected content host, chevron, popup, popup border, items presenter, option item root, option content, optgroup root, and optgroup label parts.
+- A focused read-only Agent confirmed the 2x2 anatomy shape and recommended adding stronger template-part assertions alongside the Docs case.
+
+Implementation targets:
+
+- Add `NativeSelectAnatomy.axaml` as a standalone sample file. Status: completed.
+- Register `Native Select anatomy` in `ExampleCasesFor("forms.native-select")` between states and composition. Status: completed.
+- Add `BuildNativeSelectAnatomyPreview` covering trigger anatomy, open popup anatomy, disabled option anatomy, and invalid compact anatomy. Status: completed.
+- Update Docs panel tests so the Native Select anatomy sample and preview builder are guarded by the inline-code case registry. Status: completed.
+- Tighten `NativeSelectStyleOwnsOptionsGroupsInvalidAndOpeningMotion` with template-part assertions for the anatomy pieces. Status: completed.
+- Update docs-site Forms pages in English and Chinese to document Native Select's separate state/anatomy/composition/interaction coverage. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsPanelLayoutTests`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~DocsPanelLayoutTests"`
+
+### Agent C162: Popup OpenChanged Source Metadata
+
+Status: completed for this popup/source-metadata slice. This pass makes the remaining dropdown and form popup controls expose Web-style `onOpenChange` source metadata, updates Docs interaction status text, and tightens the inline-code Docs contract that every rendered case shows its own `Show code` / `Hide code` block below the component.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDropdownButton.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexSplitButton.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexSelect.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexNativeSelect.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCombobox.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsRenderedLifecycleTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- Previous overlay and calendar/date-picker slices already established source-aware `OpenChanged` as the desktop equivalent of Web `onOpenChange`.
+- Dropdown button, split button, select, native select, and combobox still had open-change events that only exposed `IsOpen`, so Docs could not show pointer/keyboard/selection/input/clear origins.
+- Docs already uses `BuildInlineExample` to render the component preview, then a local `Show code` / `Hide code` toggle and `DocsCodeBlock` for the exact AXAML sample. The remaining risk was semantic test drift rather than the runtime layout itself.
+
+Implementation targets:
+
+- Add `OpenChangeSource` enums and `Source` event args to DropdownButton, SplitButton, Select, NativeSelect, and Combobox. Status: completed.
+- Route pointer, keyboard, programmatic, close-on-select, input, focus, clear, and item paths through source-aware open/close helpers. Status: completed.
+- Fix Combobox clear behavior so clearing text suppresses the input auto-open source and reports `Clear` when the clear action opens the popup. Status: completed.
+- Update Docs page notes, state/event matrices, and interaction previews so live `OpenChanged` status text includes `args.Source`. Status: completed.
+- Expand Docs semantic coverage so additional multi-case navigation pages enter inline-code expansion tests and the `BuildInlineExample` child order is asserted as preview, then toggle, then code block. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ComponentStructureTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+
+### Agent C159: Checkbox Switch Toggle Source Metadata
+
+Status: completed for this Web event parity slice. This pass extends the remaining standalone two-state form controls so their change events report whether the value came from host code, pointer input, or keyboard activation, matching the source-aware contracts already added to Select, Native Select, Toggle Group, Tabs, Radio Group, Slider, and navigation controls.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCheckBox.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexSwitch.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexToggle.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/CheckboxInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/SwitchInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/ToggleInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Implementation targets:
+
+- Add `CodexCheckBoxCheckedStateChangeSource`, `CodexSwitchCheckedChangeSource`, and `CodexTogglePressedChangeSource` with Programmatic, Pointer, and Keyboard values. Status: completed.
+- Extend `CheckedStateChanged`, `CheckedChanged`, and `PressedChanged` event args with `Source` while keeping old/new value payloads and defaulting host changes to Programmatic. Status: completed.
+- Route keyboard activation through explicit helpers so Checkbox Space, Switch Space/Enter, and Toggle Space/Enter publish Keyboard. Status: completed.
+- Track primary pointer activation during the native toggle lifecycle and add source-aware internal setters for deterministic tests. Status: completed.
+- Update Docs state/event matrices, live interaction status text, standalone AXAML samples, and docs-site Forms pages so Checkbox, Switch, and standalone Toggle explain source metadata while preserving per-example inline code expansion. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~CheckboxMirrorsWebCheckedStateChangeContract|FullyQualifiedName~ToggleAndToggleGroupMirrorWebPressedAndSelectionState|FullyQualifiedName~SwitchSyncsOptionalLabelContentState|FullyQualifiedName~ChoiceToggleAndRangeControlsOwnPartsEventsAndNativeChrome|FullyQualifiedName~DocsPagesRenderStateAndEventMatricesForWebParityContracts"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C160: Calendar And DatePicker Source Metadata
+
+Status: completed for this Forms event-source parity slice. This pass extends the date-selection surfaces so Calendar and DatePicker events can distinguish host-driven updates from pointer and keyboard interaction, matching the source-aware contracts already added across the rest of the Forms selection controls.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCalendar.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDatePicker.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/CalendarInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/DatePickerInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Evidence gathered:
+
+- shadcn Calendar and Date Picker are state-driven selection surfaces where pointer day activation, keyboard roving/selection, and host-controlled value changes should be observable without collapsing into one undifferentiated event path.
+- Nearby Codex Forms components now expose source-aware change events, including Checkbox, Switch, Toggle, ToggleGroup, Select, NativeSelect, RadioGroup, Slider, Tabs, and Combobox.
+- Local Docs already satisfy the required per-case code reveal pattern through `BuildInlineExample`: the rendered example appears first, then that exact AXAML sample is expanded by the local `Show code` / `Hide code` button.
+
+Implementation targets:
+
+- Add `CodexCalendarChangeSource` and propagate it through selected date, range, display date, and active date event args. Status: completed.
+- Add pending-source tracking in Calendar so public APIs default to Programmatic while day-button primary pointer release and keyboard navigation/selection publish Pointer and Keyboard. Status: completed.
+- Add `CodexDatePickerChangeSource` and propagate it through selected date, range, and open-state event args. Status: completed.
+- Route DatePicker trigger release, Escape/clear/open keyboard paths, and Calendar pointer sync through source-aware helpers while preserving public Programmatic defaults. Status: completed.
+- Refresh Docs behavior notes, state/event matrices, live interaction status text, standalone AXAML interaction cases, and docs-site Forms pages to document source metadata while preserving per-example inline code expansion. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~CalendarSyncsSelectionRangeBookedBoundsAndClasses|FullyQualifiedName~CalendarDayButtonCommandBlocksSelectionBeforeActivation|FullyQualifiedName~DatePickerSyncsSelectionRangeOpenClearAndGuards|FullyQualifiedName~DatePickerTriggerPointerReleaseUsesPrimaryButtonOnly|FullyQualifiedName~DatePickerCalendarPointerReleaseSyncsOnlyPrimarySelection|FullyQualifiedName~DatePickerRangeCalendarPointerReleaseClosesOnlyWhenPrimarySelectionCompletes|FullyQualifiedName~DatePickerPointerReleaseContractsUsePrimaryButtonOnly|FullyQualifiedName~CalendarSelectionEventsExposeWebSources|FullyQualifiedName~DocsPagesRenderStateAndEventMatricesForWebParityContracts"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C161: Overlay OpenChanged Source Metadata
+
+Status: completed for this Overlay and Disclosure event-source parity slice. This pass preserves the existing open boolean event shape while adding source metadata to overlay/disclosure open changes so hosts can distinguish pointer, keyboard, focus, hover, drag-dismiss, close-on-select, and programmatic paths.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDialog.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexPopover.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCollapsible.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexAccordion.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexTooltip.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexHoverCard.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDrawer.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCommandDialog.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+- `docs-site/content/docs/en/ui-system/overlay.mdx`
+- `docs-site/content/docs/zh/ui-system/overlay.mdx`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- Dialog, Popover, Collapsible, Tooltip, and HoverCard already exposed `OpenChanged`, but the event args only carried `IsOpen`, which made primary pointer release, Enter/Space, Escape, outside pointer, focus-open, hover-open, and host-owned state indistinguishable.
+- Dialog-derived surfaces such as AlertDialog, Sheet, Drawer, and CommandDialog inherit the same open-state contract, so fixing the base event source model gives those overlays the same Web parity surface.
+- Local Docs already preserve the required per-example code reveal model through `BuildInlineExample`; this slice updates behavior notes and matrices without changing that render-first, expand-code-under-case flow.
+
+Implementation targets:
+
+- Add `CodexDialogOpenChangeSource` and propagate it through Dialog, AlertDialog, Sheet, Drawer, and CommandDialog open/close paths. Status: completed.
+- Add `CodexPopoverOpenChangeSource` and route trigger pointer, trigger keyboard, Escape, outside pointer, and public open/dismiss APIs through source-aware helpers. Status: completed.
+- Add `CodexCollapsibleOpenChangeSource`, route pointer and keyboard trigger paths, and let Accordion-owned item state updates preserve pointer/keyboard/programmatic source metadata for item-level `OpenChanged`. Status: completed.
+- Add `CodexTooltipOpenChangeSource` and `CodexHoverCardOpenChangeSource` with Programmatic, Pointer, Focus, and Keyboard values, including delayed timer callbacks that preserve the original request source. Status: completed.
+- Forward Drawer drag-dismiss as source=Pointer and CommandDialog close-on-select as the selected command item's source. Status: completed.
+- Refresh Docs state/event matrices plus docs-site Overlay/Navigation pages to call out source-aware `OpenChanged`. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C146: Combobox And DatePicker Primary Pointer Trigger Parity
+
+Status: completed for this Forms trigger event-mechanism slice. This pass extends the primary-pointer trigger architecture from overlay/dropdown controls into Combobox and DatePicker, removing popup trigger reliance on Avalonia Button `Click` while preserving their explicit keyboard input contracts.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCombobox.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDatePicker.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Evidence gathered:
+
+- `CodexCombobox` and `CodexDatePicker` still wired popup triggers through `_trigger.Click`, even though their keyboard paths already run through `TryHandleInputKey`.
+- Button `Click` can conflate keyboard and pointer activation, while the Web parity direction now uses explicit primary pointer release guards across dropdowns, popovers, menus, items, badges, drawer handles, and date-picker calendar days.
+- DatePicker already guarded calendar day synchronization through `TryHandleCalendarPointerRelease`, so the trigger path should use the same primary-button contract.
+
+Implementation targets:
+
+- Add `CodexCombobox.TryHandleTriggerPointerRelease` and route `PART_Trigger` pointer release through `PointerUpdateKind.LeftButtonReleased`. Status: completed.
+- Add `CodexDatePicker.TryHandleTriggerPointerRelease` and route `PART_Trigger` pointer release through `PointerUpdateKind.LeftButtonReleased`. Status: completed.
+- Remove trigger-open dependency on `_trigger.Click` for both controls while keeping clear buttons on command-style `Click`. Status: completed.
+- Add behavior tests for right/middle suppression, primary release toggles, loading guards, and `OpenChanged` on both controls. Status: completed.
+- Extend structure guards and Docs/docs-site copy for primary trigger release parity. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ComboboxFiltersHighlightsSelectsClearsAndDismissesLikeWeb|FullyQualifiedName~ComboboxTriggerPointerReleaseUsesPrimaryButtonOnly|FullyQualifiedName~DatePickerSyncsSelectionRangeOpenClearAndGuards|FullyQualifiedName~DatePickerTriggerPointerReleaseUsesPrimaryButtonOnly|FullyQualifiedName~DatePickerPointerReleaseContractsUsePrimaryButtonOnly|FullyQualifiedName~ComboboxStyleOwnsSearchPopupItemStatesAndOpeningMotion|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C147: Docs Public Composition Primitive Coverage
+
+Status: completed for this Docs example-coverage slice. This pass focuses on public component primitives that existed in the library but were only implicit in templates or broad examples, so users can now expand the local AXAML under each relevant case and copy the exact composition.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/Chart.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/ItemAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/FieldGroup.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Layout/SidebarPrimitivesAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/CommandAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/MenubarComposition.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+
+Evidence gathered:
+
+- Docs already render each example before its own `Show code` / `Hide code` AXAML block through `BuildInlineExample`.
+- A scan of public controls versus AXAML sample usage showed several composable public primitives missing from copied examples: `CodexChart`, `CodexCommandShortcut`, `CodexFieldLegend`, `CodexItemHeader`, `CodexItemContent`, `CodexItemActions`, `CodexMenubarLabel`, and `CodexSidebarGroupContent`.
+
+Implementation targets:
+
+- Use `CodexChart` directly in the Chart default sample and C# preview while preserving the chart container slot contract. Status: completed.
+- Add direct Command shortcut, Field legend, Item header/content/actions, Menubar label, and Sidebar group content samples. Status: completed.
+- Keep C# previews aligned with the AXAML examples so rendered cases and expanded source teach the same composition. Status: completed.
+- Add a Docs layout test that guards direct AXAML and preview usage for these public composition primitives. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsAxamlSamplesExposePublicCompositionPrimitivesDirectly|FullyQualifiedName~ExampleAxamlFilesAreStandaloneCopiedSamples|FullyQualifiedName~EveryDocsPageExposesAtLeastFourInlineCodeExamples"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C154: CommandDialog ItemSelected Source Forwarding
+
+Status: completed for this Overlay command-dialog event slice. This pass preserves the `CodexCommandItem` source metadata added in the Command component when the same item is hosted inside `CodexCommandDialog`, so command palette overlays no longer collapse pointer or keyboard selection into the default programmatic path.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCommand.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCommandDialog.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Overlay/CommandDialogInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/overlay.mdx`
+- `docs-site/content/docs/zh/ui-system/overlay.mdx`
+
+Evidence gathered:
+
+- `CodexCommandDialog` reused `CodexCommandItemSelectedEventArgs`, but it re-created the payload without forwarding `Source`, so pointer and keyboard selections surfaced as `Programmatic`.
+- The dialog content can be hosted through a template/content boundary, so relying on a bubbling `Button.Click` handler on the dialog is weaker than letting `CodexCommandItem.TrySelect` notify the nearest `CodexCommandDialog` owner directly.
+- Docs already render the CommandDialog interaction case before its local AXAML source reveal, so the Docs update only needed to show and describe forwarded source metadata.
+
+Implementation targets:
+
+- Add `CodexCommandDialog.NotifyItemSelected` and `FindOwner` so command items can publish selected item, value, and source metadata to the nearest dialog host. Status: completed.
+- Update `CodexCommandItem.TrySelect` to notify both its owning `CodexCommand` and nearest `CodexCommandDialog` while preserving command execution, disabled/loading guards, and source-specific pointer/keyboard/programmatic selection. Status: completed.
+- Update CommandDialog Docs notes, event matrix, interaction preview status text, local AXAML interaction sample, and docs-site Overlay pages. Status: completed.
+- Add rendered behavior coverage proving CommandDialog forwards Pointer, Keyboard, and Programmatic sources, plus structure and Docs guards. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~CommandDialogMirrorsCommandAndDialogCloseSemantics|FullyQualifiedName~CommandDialogForwardsCommandItemSelectionSourceMetadata|FullyQualifiedName~CommandItemSelectionPublishesSourceMetadataAndPrimaryPointerRelease|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ControlStateTests|FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+
+### Agent C153: Command ItemSelected Source Metadata
+
+Status: completed for this Navigation command-event slice. This pass aligns `CodexCommandItem` selection with the same source-aware event model used by nearby Web-parity controls: primary pointer release, keyboard activation, and public programmatic selection are explicit in `ItemSelected`.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCommand.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/CommandInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ControlStateTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- `CodexCommandItemSelectedEventArgs` exposed the item and value, but hosts could not tell whether selection came from pointer, keyboard, or a public `TrySelect()` call.
+- `CodexCommandItem` still selected through generic `Button.OnClick`, so right and middle pointer releases were not explicitly rejected at the component-contract level.
+- Docs already render each Command case above a local `Show code` / `Hide code` AXAML block, so the correct Docs work was to enrich the interaction case and event/state matrices without changing the inline code expansion model.
+
+Implementation targets:
+
+- Add `CodexCommandItemSelectSource` and expose `Source` from `CodexCommandItemSelectedEventArgs`. Status: completed.
+- Route primary pointer release through source=Pointer, generic click/keyboard activation through source=Keyboard, and public `TrySelect()` through source=Programmatic. Status: completed.
+- Preserve `Command.CanExecute`, loading suppression, disabled suppression, command execution, sibling active selection, and selected item publication. Status: completed.
+- Update Docs behavior notes, state/event matrices, Command interaction preview, local AXAML sample, and docs-site Navigation pages. Status: completed.
+- Add behavior and source-structure coverage for pointer-only activation, keyboard/programmatic source metadata, and guard preservation. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~CommandFiltersKeyboardNavigatesAndPublishesSelection|FullyQualifiedName~CommandItemPointerActivationUsesPrimaryReleaseAndSourceMetadata|FullyQualifiedName~LoadingCommandSuppressesItemActivationAndCommandExecution|FullyQualifiedName~CommandItemSelectionPublishesSourceMetadataAndPrimaryPointerRelease|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ControlStateTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent|FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C152: Breadcrumb Link Activation Source Metadata
+
+Status: completed for this Navigation routing-event slice. This pass aligns Breadcrumb ancestor-link activation with the same source-aware event model now used across selection and route surfaces: primary pointer release, keyboard activation, and programmatic activation are explicit in `LinkActivated`.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexBreadcrumb.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/BreadcrumbInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- `CodexBreadcrumbLinkActivatedEventArgs` already exposed link, item, index, href, and content metadata, but not whether the route came from pointer, keyboard, or host/programmatic activation.
+- `CodexBreadcrumbLink` still selected through generic `Button.OnClick`, so right/middle pointer releases could not be explicitly rejected at the component-contract level.
+- Nearby navigation surfaces now use primary pointer release helpers and source metadata, so Breadcrumb should not remain the odd route surface out.
+
+Implementation targets:
+
+- Add `CodexBreadcrumbLinkActivationSource` and expose `Source` from `CodexBreadcrumbLinkActivatedEventArgs`. Status: completed.
+- Route `CodexBreadcrumbLink` primary pointer release through source=Pointer, generic keyboard activation through source=Keyboard, and public `TryActivate()` through source=Programmatic. Status: completed.
+- Preserve `Command.CanExecute`, current-page suppression, disabled suppression, command execution, and normal Button click semantics. Status: completed.
+- Update Docs, AXAML interaction sample, and docs-site Navigation pages to name source-aware Breadcrumb activation. Status: completed.
+- Add behavior and source-structure coverage for pointer-only activation, keyboard/programmatic source metadata, and guard preservation. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~BreadcrumbCompositionMirrorsWebPathLinksAndCurrentPageGuard|FullyQualifiedName~BreadcrumbLinkActivationUsesPrimaryReleaseAndSourceMetadata|FullyQualifiedName~BreadcrumbLinkActivationHonorsCommandCanExecuteBeforePublishing|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+
+### Agent C151: Navigation Selection Source Metadata Parity
+
+Status: completed for this Navigation event-path slice. This pass aligns SideNav and SegmentedControl selection events with the source-aware Web parity contract already used by RadioGroup: primary pointer release, keyboard activation, and programmatic selection now remain distinguishable.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexNavigationPrimitives.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/SideNavInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/SegmentedControlInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ControlStateTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- `CodexSideNavValueChangedEventArgs` and `CodexSegmentedControlValueChangedEventArgs` exposed old/new item, index, and value metadata, but did not expose whether the change came from pointer, keyboard, or programmatic selection.
+- Both item types still used generic `Button.OnClick` selection, so right/middle pointer release could not be explicitly separated from primary pointer release in tests.
+- RadioGroup, ProviderCard, menu links, and other Web-parity surfaces now use explicit primary pointer release helpers, so navigation selection should follow the same event architecture.
+
+Implementation targets:
+
+- Add `CodexSideNavValueChangeSource` and `CodexSegmentedControlValueChangeSource`, and expose `Source` from both `ValueChanged` event payloads. Status: completed.
+- Route `CodexSideNavItem` primary pointer release through source=Pointer and generic keyboard activation through source=Keyboard, while keeping command-blocked and disabled guards. Status: completed.
+- Route `CodexSegmentedButton` primary pointer release through source=Pointer and keyboard activation through source=Keyboard, while keeping command-backed segments controlled. Status: completed.
+- Update Docs, AXAML interaction samples, and docs-site Navigation pages to name primary pointer release and source metadata. Status: completed.
+- Add behavior and source-structure coverage for pointer-only activation and source metadata. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~SideNavPublishesWebStyleValueChangedOnSelection|FullyQualifiedName~SideNavCommandCanExecuteSuppressesSelectionAndSyncsClasses|FullyQualifiedName~SideNavItemPointerActivationUsesPrimaryReleaseOnly|FullyQualifiedName~SegmentedControlPublishesWebStyleValueChangedOnSelection|FullyQualifiedName~SegmentedButtonsWithCommandsUseControlledSelection|FullyQualifiedName~SegmentedButtonPointerActivationUsesPrimaryReleaseOnly|FullyQualifiedName~NavigationPrimitivesOwnSelectionDisclosureAndSeparatorChrome"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ControlStateTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C150: RadioGroup Pointer And Source Metadata Parity
+
+Status: completed for this Forms Radio Group event-path slice. This pass makes RadioGroup item activation report the same kind of source evidence that other Web-parity controls now expose: primary pointer release, Space/Enter activation, and roving arrow selection are distinct paths in `ValueChanged`.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexRadioGroup.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/RadioGroupInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Evidence gathered:
+
+- `CodexRadioGroupItem` still selected through generic `OnClick`, while the page contract described pointer and keyboard selection as equivalent paths.
+- `CodexRadioGroupValueChangedEventArgs` already exposed old/new item, index, and value metadata, but not the activation source needed to verify pointer, keyboard, and roving focus parity.
+- Existing Forms controls now prefer explicit primary pointer release helpers for trigger/selection surfaces, so RadioGroup should follow the same event architecture.
+
+Implementation targets:
+
+- Add `CodexRadioGroupValueChangeSource` and expose `Source` from `CodexRadioGroupValueChangedEventArgs`. Status: completed.
+- Route roving arrow selection through `KeyboardNavigation`, Space/Enter selection through `Keyboard`, and item pointer selection through primary left-button release with `Pointer`. Status: completed.
+- Add `TryHandlePointerActivation(PointerUpdateKind updateKind)` to RadioGroup items and reject right/middle pointer releases, disabled items, and loading roots. Status: completed.
+- Update Docs and docs-site copy so the visible Radio Group contract names primary pointer release and source metadata. Status: completed.
+- Add behavior and source-structure coverage for pointer-only activation and source metadata. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~RadioGroupMirrorsWebValueOrientationAndRovingSelectionState|FullyQualifiedName~RadioGroupItemPointerActivationUsesPrimaryReleaseOnly|FullyQualifiedName~RadioGroupItemPointerAndKeyboardContractsExposeWebSources"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C149: ProviderCard Primary Pointer Activation Parity
+
+Status: completed for this ProviderCard event-path slice. This pass makes provider-row selection explicit about pointer source: left-button pointer release owns pointer selection, while keyboard and command behavior continue through the existing Button activation path.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexProviderCard.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/ProviderCardInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ControlStateTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs-site/content/docs/en/ui-system/data-display.mdx`
+- `docs-site/content/docs/zh/ui-system/data-display.mdx`
+
+Evidence gathered:
+
+- `CodexProviderCard` is a provider-row selection surface, but still selected through generic `Button.OnClick`.
+- Existing ProviderCard parity already blocked disabled, dragging, and `Command.CanExecute=false` rows; the remaining gap was primary-pointer specificity.
+- Nearby row-like surfaces already expose `TryHandlePointerActivation` / `PointerUpdateKind.LeftButtonReleased` guards, so ProviderCard should use the same event architecture.
+
+Implementation targets:
+
+- Add `TryHandlePointerActivation(PointerUpdateKind updateKind)` and accept only `LeftButtonReleased`. Status: completed.
+- Route `OnPointerPressed` / `OnPointerReleased` through a primary press-start plus in-bounds release guard, then avoid duplicate row selection when Button `OnClick` is raised from the same pointer release. Status: completed.
+- Keep keyboard and command activation behavior through `OnClick`, including disabled, dragging, and command-blocked guards. Status: completed.
+- Add behavior and structure tests for right/middle suppression, primary release selection, and guard preservation. Status: completed.
+- Update Docs/docs-site wording so the visible contract says primary pointer release, not generic click. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ProviderCardPointerActivationUsesPrimaryReleaseAndSelectionGuards|FullyQualifiedName~ProviderCardDraggingAndDisabledStatesSuppressSelectionAndCommand|FullyQualifiedName~ProviderCardCommandCanExecuteSuppressesSelectionAndSyncsClasses|FullyQualifiedName~CommandItemsAndProviderCardsSelectExclusivelyOnClick|FullyQualifiedName~DataDisplayTablePaginationAndChartPrimitivesOwnChromeAndMotion"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C148: Pagination Action Primary Pointer Parity
+
+Status: completed for this Data Display Pagination action-event slice. This pass removes first/previous/next/last action navigation from generic Avalonia `Click` subscriptions and gives those button-like surfaces the same explicit Web-style split used elsewhere: primary pointer release for pointer activation, Enter/Space for focused action buttons, and existing root navigation keys for Home/End/Left/Right/PageUp/PageDown.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexPagination.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/PaginationInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs-site/content/docs/en/ui-system/data-display.mdx`
+- `docs-site/content/docs/zh/ui-system/data-display.mdx`
+
+Evidence gathered:
+
+- `CodexPagination` still attached `_firstButton.Click`, `_previousButton.Click`, `_nextButton.Click`, and `_lastButton.Click`, while surrounding overlay, dropdown, combobox, date-picker, item, and carousel work now uses explicit primary pointer release guards.
+- Pagination page items already had command/loading/current/ellipsis guards; the missing event-path parity was specifically the boundary/action button surface.
+- Docs and docs-site described generic action/click behavior, so the visible contract needed to name primary pointer release and Enter/Space action activation.
+
+Implementation targets:
+
+- Add `TryHandleActionPointerRelease(PointerUpdateKind updateKind, CodexPaginationPageChangeSource source)` and route action buttons through `InputElement.PointerReleasedEvent`. Status: completed.
+- Add `TryHandleActionKey(Key key, CodexPaginationPageChangeSource source)` so focused action buttons preserve Enter/Space activation without relying on generic `Click`. Status: completed.
+- Remove first/previous/next/last `Click += On...Clicked` subscriptions while preserving Home/End/Left/Right/PageUp/PageDown root navigation. Status: completed.
+- Add behavior coverage for right/middle suppression, primary action source metadata, boundary/loading guards, and Enter/Space-only action keys. Status: completed.
+- Extend structure guards and Docs/docs-site copy for the primary pointer action contract. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~PaginationMirrorsWebPageSelectionAndBoundaryNavigation|FullyQualifiedName~PaginationActionPointerReleaseUsesPrimaryButtonOnly|FullyQualifiedName~PaginationActionKeyboardActivationUsesEnterAndSpaceOnly|FullyQualifiedName~PaginationPageButtonUsesCommandAndLoadingGuardsBeforeActivation|FullyQualifiedName~DataDisplayTablePaginationAndChartPrimitivesOwnChromeAndMotion|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+
+### Agent C145: Dropdown And Split Primary Pointer Trigger Parity
+
+Status: completed for this dropdown trigger event-mechanism slice. This pass separates pointer and keyboard trigger paths for DropdownButton and SplitButton so menu opening no longer depends on Avalonia Button `Click` for trigger toggling; primary pointer release owns pointer toggles, while Enter/Space/ArrowDown own keyboard opening.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDropdownButton.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexSplitButton.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- The previous keyboard parity slice made Enter, Space, and ArrowDown explicit, but the trigger template still used Button `Click` for pointer toggles.
+- Button `Click` can conflate keyboard and pointer activation, which is exactly the class of event-trigger drift the Web parity goal calls out.
+- Dialog, Popover, Sheet, Drawer, Menu, ContextMenu, Item, Badge, and other updated controls already use primary pointer release guards, so DropdownButton and SplitButton should follow the same event architecture.
+
+Implementation targets:
+
+- Add `CodexDropdownButton.TryHandleTriggerPointerRelease` and route trigger pointer release through `PointerUpdateKind.LeftButtonReleased`. Status: completed.
+- Add `CodexSplitButton.TryHandleMenuTriggerPointerRelease` and route the menu trigger pointer release through `PointerUpdateKind.LeftButtonReleased`. Status: completed.
+- Remove trigger-open dependency on `_trigger.Click` / `_menuTrigger.Click` while preserving SplitButton primary action `Click`. Status: completed.
+- Extend behavior tests for right/middle suppression, primary release toggles, loading/content guards, keyboard paths, and structure guards. Status: completed.
+- Update Docs event text and docs-site EN/ZH summaries to describe primary pointer release plus keyboard trigger parity. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DropdownButtonTriggerKeysOpenLikeWebMenuTrigger|FullyQualifiedName~SplitButtonMenuTriggerKeysOpenLikeWebMenuTrigger|FullyQualifiedName~DropdownButtonMirrorsDropdownMenuOpenDismissAndSelectSemantics|FullyQualifiedName~SplitButtonSeparatesPrimaryActionFromDropdownSemantics|FullyQualifiedName~ComponentStructureTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C144: Dropdown And Split Trigger Keyboard Parity
+
+Status: completed for this dropdown trigger event-parity slice. This pass makes DropdownButton and SplitButton menu triggers explicitly open through Enter, Space, or ArrowDown, matching the Web dropdown trigger keyboard contract instead of relying on button click behavior for Enter/Space.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDropdownButton.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexSplitButton.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- Web dropdown triggers open from Enter, Space, and ArrowDown, while the local trigger key helpers only handled ArrowDown directly.
+- DropdownButton and SplitButton already share open, loading, content, close-on-select, Escape, and focus-return contracts, so the missing piece was explicit keyboard trigger parity.
+- Docs already render each dropdown and split-button case above its local `Show code` / `Hide code` AXAML block, so only the event matrix and docs-site summaries needed wording updates.
+
+Implementation targets:
+
+- Update `CodexDropdownButton.TryHandleTriggerKey` to accept Enter, Space, and Down through one open path. Status: completed.
+- Update `CodexSplitButton.TryHandleMenuTriggerKey` to accept Enter, Space, and Down through one open path. Status: completed.
+- Add behavior tests for Enter, Space, Down, ignored keys, loading guards, `OpenChanged`, and Escape dismissal on both controls. Status: completed.
+- Update structure guards and Docs event text to preserve the explicit Web trigger key contract. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DropdownButtonTriggerKeysOpenLikeWebMenuTrigger|FullyQualifiedName~SplitButtonMenuTriggerKeysOpenLikeWebMenuTrigger|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C143: Rendered Submenu And Table Alignment Guards
+
+Status: completed for this rendered regression coverage slice. This pass turns the existing visual-pass hook into concrete headless coverage for two Web-parity surfaces that are easy to regress visually: submenu popups must render while open, and table head/cell alignment must place text at the expected left, center, and right positions after the template is applied.
+
+Scope:
+
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/MenuRenderedLifecycleTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/TableRenderedLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+
+Evidence gathered:
+
+- `NavigationDataComponentTests` still carried a visual-pass hook for submenu popups and table column alignment.
+- Menu and ContextMenu already had behavioral tests for submenu open/close delay and keyboard routing, but the delayed pointer test captured a frame after closing rather than while both submenu surfaces were open.
+- Table head and cell alignment already exposed `align-left`, `align-center`, and `align-right` classes and set `HorizontalContentAlignment`, but no rendered test proved the template placed text at the expected column positions.
+
+Implementation targets:
+
+- Assert open Menu and ContextMenu submenu surfaces are visible through `PART_Popup` / `PART_SubMenuSurface` and capture a rendered frame before closing. Status: completed.
+- Add `TableRenderedLayoutTests` with headless left/center/right header and body cell alignment checks using actual visual bounds. Status: completed.
+- Extend structure guards so rendered submenu and table alignment coverage stays present. Status: completed.
+- Replace the stale visual-pass hook comment with the new coverage note. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~TableRenderedLayoutTests|FullyQualifiedName~MenuRenderedLifecycleTests|FullyQualifiedName~ComponentStructureTests"`
+
+### Agent C142: Carousel Anatomy Docs Case
+
+Status: completed for this Data Display Carousel Docs coverage slice. This pass replaces the implicit use of the Carousel composition case as anatomy coverage with a dedicated anatomy example, while preserving the Docs rule that the rendered component appears first and the local AXAML source expands directly under that case.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/CarouselAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/data-display.mdx`
+- `docs-site/content/docs/zh/ui-system/data-display.mdx`
+
+Evidence gathered:
+
+- The Carousel page already had default, states, composition, and interaction examples, but no standalone `CarouselAnatomy.axaml`.
+- `DocsPanelLayoutTests` was listing `DataDisplay/CarouselComposition.axaml` in the anatomy sample bucket, which made the coverage look complete while the page lacked an anatomy-named source file.
+- The existing Docs shell already handles local `Show code` / `Hide code` expansion for any registered `DocsExampleCase`, so adding a separate AXAML file and preview builder preserves the current architecture.
+
+Implementation targets:
+
+- Add `CarouselAnatomy.axaml` covering template-owned viewport, items, previous/next controls, status, and selected-index boundary classes. Status: completed.
+- Register `BuildCarouselAnatomyPreview` under `data.carousel` before composition and reuse existing Carousel preview helpers. Status: completed.
+- Extend Docs layout tests so Carousel anatomy is an explicit file and builder, while keeping Carousel composition as a separate case. Status: completed.
+- Update docs-site EN/ZH Data Display notes to mention anatomy/state/composition/interaction Carousel cases. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C141: Carousel Boundary Action State Parity
+
+Status: completed for this Data Display Carousel boundary-action parity slice. This pass makes carousel edge availability deterministic and inspectable before commands run, matching the Web carousel contract where previous/next controls expose disabled boundary state while looped carousels can still wrap from either edge.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCarousel.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Carousel.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/CarouselInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/data-display.mdx`
+- `docs-site/content/docs/zh/ui-system/data-display.mdx`
+
+Evidence gathered:
+
+- `CodexCarousel` already exposed `CanGoPrevious`, `CanGoNext`, `can-previous`, and `can-next`, but `at-start` / `at-end` were written from the ScrollViewer offset in a delayed render callback.
+- The delayed ScrollViewer-derived classes could drift from the selected slide state and were not available as deterministic state before previous/next commands were evaluated.
+- The Docs interaction case already covered command, keyboard, loop, and vertical paths with inline AXAML reveal, so the missing piece was explicit boundary class visibility.
+
+Implementation targets:
+
+- Add `at-start`, `at-end`, `previous-disabled`, and `next-disabled` classes from `SelectedIndex`, `SlideCount`, `CanGoPrevious`, and `CanGoNext`. Status: completed.
+- Stop mutating boundary classes from ScrollViewer offset after `BringIntoView`, leaving scroll positioning visual and class state selected-index driven. Status: completed.
+- Add scoped previous/next button styles for boundary-disabled states using the shared disabled opacity token and arrow cursor. Status: completed.
+- Update the Carousel interaction sample, state/event matrices, docs-site EN/ZH notes, and structure/navigation tests for deterministic boundary classes. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C140: EmptyState Action Command Blocked State Parity
+
+Status: completed for this Feedback EmptyState interaction parity slice. This pass makes command-backed primary and secondary empty-state actions expose visible Web-style blocked states before request events fire, while keeping the empty surface mounted and visually scoped to the affected action buttons.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexEmptyState.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/EmptyState.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/EmptyStateInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/feedback.mdx`
+- `docs-site/content/docs/zh/ui-system/feedback.mdx`
+
+Evidence gathered:
+
+- `CodexEmptyState` already tracked `ActionCommand` and `SecondaryActionCommand` `CanExecuteChanged`, and used `CanExecuteAction` / `CanExecuteSecondaryAction` to suppress `ActionRequested` and `SecondaryActionRequested`.
+- The root only exposed `can-action` and `can-secondary-action`; blocked host commands were not distinguishable from loading, disabled, or missing action states in styles or Docs.
+- The interaction Docs case covered action requests, loading, disabled, and semantic variants, but not a real command-blocked action path under the local inline AXAML reveal.
+
+Implementation targets:
+
+- Add `action-command-blocked`, `secondary-action-command-blocked`, and aggregate `command-blocked` classes for enabled, non-loading action commands that cannot execute. Status: completed.
+- Add scoped styles that dim only the blocked action button instead of muting the entire empty-state surface. Status: completed.
+- Update the EmptyState interaction preview and AXAML sample with a real command-blocked action case. Status: completed.
+- Extend Docs state/event matrices and docs-site EN/ZH Feedback notes with the command-blocked action contract. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C139: Item ActivateCommand Blocked State Parity
+
+Status: completed for this Data Display Item interaction parity slice. This pass makes command-backed `CodexItem` rows expose the same Web-style blocked availability signal as the newer provider-card, pagination, calendar, segmented-control, and command-item slices: `CanExecute=false` is visible before activation and suppresses row events without replacing row slots.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexItem.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Item.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/ItemInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/data-display.mdx`
+- `docs-site/content/docs/zh/ui-system/data-display.mdx`
+
+Evidence gathered:
+
+- `CodexItem` already subscribed to `ActivateCommand.CanExecuteChanged` and used `CanActivate` to block `TryActivate()`, pointer release, and Enter/Space activation, but it did not expose an explicit `command-blocked` class for styles or Docs.
+- `Item.axaml` had `can-activate`, loading, selected, and interactive hover/press selectors, but blocked command rows still looked hoverable because there was no disabled-like command state selector.
+- The desktop Item interaction Docs case included a "Command blocked" row, but it used `IsLoading=true` rather than a real `CanExecute=false` command.
+
+Implementation targets:
+
+- Sync `command-blocked` on `CodexItem` when an interactive, enabled, non-loading command-backed row cannot activate. Status: completed.
+- Add Item styles for blocked cursor, opacity, hover/focus reset, pressed transform reset, and selected blocked hover preservation. Status: completed.
+- Update the Item interaction preview to attach a `CanExecute=false` command and keep the AXAML sample aligned through an explicit `command-blocked` row. Status: completed.
+- Extend Docs state/event matrices and docs-site EN/ZH Data Display notes with Item command-blocked and `CanExecuteChanged` behavior. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C138: Command Item CanExecute State Parity
+
+Status: completed for this Navigation Command interaction parity slice. This pass makes command-backed `CodexCommandItem` rows expose Web-style selectability before activation, so blocked commands do not become active results, do not emit `ItemSelected`, and do not run host commands.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCommand.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Command.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/CommandInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- `CodexCommandItem.CanSelect()` already considered `Command.CanExecute(CommandParameter)`, but the result was not exposed as a visible state class.
+- `CodexCommand.TryHandleNavigationKey()` only skipped disabled rows, so a command-blocked row could remain in the active-result path even though selection was suppressed later.
+- Recent SideNav, SegmentedControl, Pagination, and Calendar slices use explicit `can-select` / `can-activate` plus `command-blocked` classes before mutating component state.
+- Desktop Docs already render the Command interaction case above its local `Show code` / `Hide code` AXAML expansion, so this slice only needed to enrich the case rather than change the Docs architecture.
+
+Implementation targets:
+
+- Add command subscription and `CanExecuteChanged` refresh to `CodexCommandItem`. Status: completed.
+- Sync `can-select` and `command-blocked` classes from `CanSelect()` and `Command.CanExecute`. Status: completed.
+- Refresh command item classes when the owning `CodexCommand.IsLoading` changes. Status: completed.
+- Make active-result keyboard navigation and `TrySelectActiveItem()` skip non-selectable command items. Status: completed.
+- Add command item styles for `can-select`, `command-blocked`, blocked hover, blocked focus-visible, and blocked active states. Status: completed.
+- Extend Command Docs state/event matrices, the interaction AXAML sample, and docs-site Navigation notes with the command-blocked item contract. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C137: Calendar Day Command Guard And Docs Case
+
+Status: completed for this Forms interaction parity slice. This pass closes the Calendar day-button activation gap so host commands can block a generated day cell before selection changes, matching the Web expectation that blocked/disabled day actions do not emit selection events.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexCalendar.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Calendar.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/CalendarInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/forms.mdx`
+- `docs-site/content/docs/zh/ui-system/forms.mdx`
+
+Evidence gathered:
+
+- `CodexCalendarDayButton` inherits `Button`, but previously selected its owner date before `base.OnClick()`, so a host command with `CanExecute=false` could not block the selection path.
+- Recent navigation and pagination parity slices already expose `can-select` / `can-activate` and `command-blocked` classes before changing selection or page state.
+- Desktop Docs already render each Calendar example above its local `Show code` / `Hide code` AXAML expansion, so the interaction sample only needed a command-blocked day case and state/event matrix coverage.
+
+Implementation targets:
+
+- Add `CodexCalendar.CanSelectDate(DateTime)` and root enabled-state day refresh so day cells can consider owner availability. Status: completed.
+- Add `CodexCalendarDayButton.CanActivate`, command subscription, `CanExecuteChanged` class refresh, `can-activate`, and `command-blocked`. Status: completed.
+- Change day activation order to run `base.OnClick()` only after the activation guard and before mutating Calendar selection. Status: completed.
+- Add Calendar styles for `can-activate`, `command-blocked`, blocked hover, and blocked pressed states. Status: completed.
+- Extend Calendar interaction Docs and docs-site Forms notes with the command-blocked day contract while preserving local inline code expansion. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `npm run lint` in `docs-site`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C136: SegmentedControl Command Block State Parity
+
+Status: completed for this Navigation SegmentedControl event-parity slice. This pass makes command-backed `CodexSegmentedButton` items expose `can-select` and `command-blocked` state before activation, while preserving the Web-style controlled-selection behavior where command-backed segments execute host commands without moving the indicator.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexNavigationPrimitives.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/ApplicationShell.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/SegmentedControlInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ControlStateTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- `CodexSegmentedControl` already owns root `SelectedValue`, `ValueChanged`, and measured indicator movement for Web `onValueChange` parity.
+- `CodexSegmentedButton.OnClick()` intentionally returns after `base.OnClick()` when `Command` is present, keeping command-backed selection external to the component.
+- That controlled path suppressed selection correctly when commands were present, but command availability was invisible to styles and Docs.
+- Root `SelectButton()` and fallback sibling selection only checked `IsEnabled`, so helper-driven selection could still ignore command availability.
+
+Implementation targets:
+
+- Add `CanSelect` to `CodexSegmentedButton`, using `IsEnabled` and inherited `Command.CanExecute(CommandParameter)`. Status: completed.
+- Gate root `SelectButton()`, fallback sibling selection, and click activation on `CanSelect`, while keeping command-backed segments externally controlled. Status: completed.
+- Subscribe/unsubscribe to inherited `Command.CanExecuteChanged`, and sync `can-select` / `command-blocked` classes. Status: completed.
+- Add command-blocked segmented-button styles that remove hover scale and press affordance without moving the selected indicator. Status: completed.
+- Extend Docs state/event matrices, interaction AXAML, and docs-site Navigation notes for command-blocked segments. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ControlStateTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 77 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+
+### Agent C135: Pagination Page Button Command Guard Parity
+
+Status: completed for this Data Display Pagination event-parity slice. This pass reconnects `CodexPaginationPageButton` to the inherited `CodexButton` command/loading activation contract before requesting `PageChanged`, so page item commands can block page changes like Web pagination handlers.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexPagination.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Pagination.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/PaginationInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/data-display.mdx`
+- `docs-site/content/docs/zh/ui-system/data-display.mdx`
+
+Evidence gathered:
+
+- `CodexPaginationPageButton` inherits `CodexButton`, but its `OnClick()` selected a page without calling `base.OnClick()`.
+- That bypassed inherited command execution, `Command.CanExecute`, and `CodexButton.IsLoading` suppression for standalone or command-backed page items.
+- `CodexPagination.SelectPage()` already suppresses root loading and boundary changes, so the missing piece was the page-item activation gate before command/click/page-change sequencing.
+- Docs covered loading suppression and `PageChanged` source metadata, but not page-item command-blocked behavior.
+
+Implementation targets:
+
+- Add `CanSelectPageItem(int page)` on `CodexPagination` for page-item navigation guards. Status: completed.
+- Add `CanActivate` to `CodexPaginationPageButton`, gating on enabled, not loading, not current, not ellipsis, command executability, and owning pagination availability. Status: completed.
+- Subscribe/unsubscribe to inherited `Command.CanExecuteChanged`, sync `can-activate` / `command-blocked`, call `base.OnClick()` for command/click execution, then request `SelectPage(...PageItem)`. Status: completed.
+- Add page-button command-blocked styling and tests proving command, loading, current, and root loading guards suppress activation. Status: completed.
+- Extend Pagination Docs state/event matrices, interaction AXAML, and docs-site Data Display notes for page-item command guards. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 134 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+
+### Agent C134: SideNav Command Block Selection Parity
+
+Status: completed for this Navigation SideNav event-parity slice. This pass makes `CodexSideNavItem` honor inherited `Command.CanExecute` before changing the root `SelectedValue` or legacy sibling selection, so command-blocked rows no longer publish `ValueChanged` ahead of the host command path.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexNavigationPrimitives.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/ApplicationShell.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/SideNavInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ControlStateTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- `CodexSideNav` already owns Web-style `SelectedValue` and `ValueChanged` metadata for old/new item, index, and value.
+- `CodexSideNavItem.OnClick()` called `base.OnClick()` and then selected through the root or fallback sibling path, so a blocked inherited command could still mutate navigation state.
+- The root `SelectItem()` only checked `IsEnabled`, not command executability, so helper-driven selection had the same command-block gap.
+- Docs covered disabled rows and root value changes, but not command-blocked navigation rows.
+
+Implementation targets:
+
+- Add `CanSelect` to `CodexSideNavItem` and gate click, root selection, and fallback sibling selection on `IsEnabled` plus `Command.CanExecute(CommandParameter)`. Status: completed.
+- Subscribe/unsubscribe to inherited `Command.CanExecuteChanged`, and sync `can-select` / `command-blocked` classes on command, parameter, enabled, and selected state changes. Status: completed.
+- Add SideNav command-blocked styling that suppresses hover/press affordance while preserving selected-row context when applicable. Status: completed.
+- Add tests proving blocked commands suppress command execution, root `SelectedValue`, `ValueChanged`, and selected row changes, then recover after `CanExecuteChanged`. Status: completed.
+- Extend Docs state/event matrices, interaction preview/source, and docs-site Navigation notes for command-blocked rows. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ControlStateTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 77 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+
+### Agent C133: Sidebar Trigger And Rail Command Block Parity
+
+Status: completed for this Layout sidebar event-parity slice. This pass makes `CodexSidebarTrigger` and `CodexSidebarRail` honor inherited `Command.CanExecute` before toggling provider/sidebar open state, matching the Web controlled-trigger expectation that blocked actions do not publish `OpenChanged`.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexApplicationShell.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/ApplicationShell.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/index.mdx`
+- `docs-site/content/docs/zh/ui-system/index.mdx`
+
+Evidence gathered:
+
+- `CodexSidebarTrigger.OnClick()` and `CodexSidebarRail.OnClick()` toggled the nearest provider/sidebar before calling `base.OnClick()`.
+- A blocked inherited command could therefore suppress the host command while still changing sidebar open state and emitting `OpenChanged`.
+- Trigger already used `CodexButton` loading suppression, but that loading guard did not include host command availability.
+- Docs described trigger/rail/shortcut state sync, but not command-blocked trigger behavior.
+
+Implementation targets:
+
+- Add `CanToggle` to trigger and rail, gating toggles on `IsEnabled`, trigger `IsLoading`, and inherited `Command.CanExecute(CommandParameter)`. Status: completed.
+- Subscribe/unsubscribe to trigger and rail `Command.CanExecuteChanged`, and sync `can-toggle` / `command-blocked` classes on command, parameter, enabled, loading, and sidebar state changes. Status: completed.
+- Add command-blocked styles for trigger and rail so blocked controls keep state context while removing active press affordance. Status: completed.
+- Add behavior tests proving blocked trigger/rail commands do not toggle or execute, then recover after `CanExecuteChanged`. Status: completed.
+- Extend Docs state/event matrices and docs-site layout summary for command-blocked trigger/rail parity. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~DocsPanelLayoutTests"`: 97 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+
+### Agent C132: ProviderCard Command Block Selection Parity
+
+Status: completed for this ProviderCard event-parity slice. This pass makes provider rows honor inherited `Button.Command.CanExecute` before changing sibling active state, so command-blocked rows no longer select themselves or clear the current provider ahead of the host command path.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexProviderCard.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/ApplicationShell.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/DataDisplay/ProviderCardInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ControlStateTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `docs-site/content/docs/en/ui-system/data-display.mdx`
+- `docs-site/content/docs/zh/ui-system/data-display.mdx`
+
+Evidence gathered:
+
+- `CodexProviderCard` inherits `Button`, but its previous `CanSelect()` only checked `IsEnabled` and `IsDragging`.
+- `OnClick()` called `base.OnClick()` and then selected sibling cards, so a blocked inherited command could suppress command execution while still changing active provider state.
+- Legacy provider-row styling already treated dragging as a non-selection state, and newer navigation/link components already expose `can-activate` / `command-blocked` for Web-style command guards.
+- Docs had selection, dragging, action-slot, and disabled examples, but not a command-blocked selection guard case.
+
+Implementation targets:
+
+- Extend `CanSelect()` to require `Command.CanExecute(CommandParameter)` when a command is present. Status: completed.
+- Subscribe/unsubscribe to inherited `Command.CanExecuteChanged`, and sync `can-select` / `command-blocked` classes when command, parameter, enabled, or dragging state changes. Status: completed.
+- Add ProviderCard command-blocked styling so hover/pressed feedback does not imply activation while active cards can retain their selected visual family. Status: completed.
+- Add behavior and structure tests proving blocked commands suppress selection and command execution, then recover after `CanExecuteChanged`. Status: completed.
+- Extend Docs state/event matrices and the ProviderCard interaction AXAML sample with a command-blocked row under the same local inline code expansion contract. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ControlStateTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 76 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+
+### Agent C131: AlertDialog Part Command CanExecute Parity
+
+Status: completed for this AlertDialog response-button command parity slice. This pass keeps the internal cancel/action part commands synchronized with host `CancelCommand` and `ActionCommand` `CanExecuteChanged`, so the visible response buttons update before activation just like Web dialog actions.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexAlertDialog.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+
+Evidence gathered:
+
+- `CodexAlertDialog` exposes host `CancelCommand` and `ActionCommand`, then wraps them with internal part commands bound to `PART_Cancel` and `PART_Action`.
+- `CanCancel()` and `CanAction()` already consulted the host command `CanExecute`, but host `CanExecuteChanged` was not forwarded to the internal part commands.
+- That left button availability stale when an async validation, destructive confirmation, or loading boundary flipped command executability after the dialog opened.
+- Docs already described cancel/action response activation, but did not call out live `CanExecute` propagation for the response buttons.
+
+Implementation targets:
+
+- Resubscribe `CodexAlertDialog` to host cancel/action command changes and detach subscriptions when commands or the dialog visual tree change. Status: completed.
+- Forward host `CanExecuteChanged` to the internal part commands through `RaisePartCommandStateChanged()`. Status: completed.
+- Add tests proving cancel/action part commands raise availability changes, suppress execution while blocked, and execute again after host commands recover. Status: completed.
+- Extend structure and Docs guards so the part-command forwarding contract and event matrix copy do not regress silently. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 81 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check` from `/data/CodexSwitch` and `/data/CodexSwitch/CodexSwitchUI`: passed.
+
+### Agent C130: Breadcrumb Link Command Block Parity
+
+Status: completed for this Breadcrumb link parity slice. This pass makes breadcrumb links honor `Command.CanExecute` before publishing `LinkActivated`, so command-blocked links no longer route or emit activation metadata ahead of the native button command path.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexBreadcrumb.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Themes/Controls/Breadcrumb.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+
+Evidence gathered:
+
+- `CodexBreadcrumbLink.OnClick` notified the owning breadcrumb before `base.OnClick()`, so a blocked inherited `Button.Command` could still publish `LinkActivated` even though Web-style link/button activation should be suppressed.
+- `TryActivate()` only checked `IsCurrent` and `IsEnabled`, not the inherited `Command.CanExecute(CommandParameter)` state.
+- Breadcrumb links did not expose synchronized `can-activate` or `command-blocked` classes, leaving command availability invisible to styles and Docs.
+- Docs described current-page suppression but not command-blocked suppression.
+
+Implementation targets:
+
+- Add `CanActivate` to `CodexBreadcrumbLink` and gate both `TryActivate()` and `OnClick()` on `!IsCurrent`, `IsEnabled`, and `Command.CanExecute`. Status: completed.
+- Subscribe/unsubscribe to inherited `Command.CanExecuteChanged`, sync `can-activate` and `command-blocked`, and update on command parameter/enabled/current changes. Status: completed.
+- Add Breadcrumb style support for `command-blocked` with disabled opacity and non-click cursor. Status: completed.
+- Extend behavior tests proving blocked breadcrumb commands suppress `TryActivate()`, command execution, and `LinkActivated`, then restore classes when executable again. Status: completed.
+- Add structure and Docs guards for command-before-publish behavior and the visible event matrix copy. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 131 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check` from `/data/CodexSwitch` and `/data/CodexSwitch/CodexSwitchUI`: passed.
+
+### Agent C129: NavigationMenu Top-Level Link Command Block Parity
+
+Status: completed for this NavigationMenu top-level link parity slice. This pass fixes command-blocked top-level link behavior so a failed `CanExecute` no longer falls through into viewport activation, and keeps link availability classes synchronized with host command state.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexNavigationMenu.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+
+Evidence gathered:
+
+- `CodexNavigationMenuItem.TryHandlePointerRelease` and `TryHandleActivationKey` treated any failed `TryActivateLink()` as a content-trigger path, so a command-blocked top-level link could open the viewport instead of doing nothing.
+- Top-level navigation-menu items did not subscribe to `Command.CanExecuteChanged`, leaving `can-activate` stale after host command state changed.
+- Pointer focus still used `IsLeftButtonPressed` instead of the stricter `PointerUpdateKind.LeftButtonPressed` contract used by newer parity slices.
+- Docs did not surface the command-blocked top-level link behavior.
+
+Implementation targets:
+
+- Add `CanActivateLink` and use it from `TryActivateLink`, `TryHandlePointerRelease`, and `TryHandleActivationKey`. Status: completed.
+- Split link and content-trigger branches so command-blocked links return false without opening the viewport. Status: completed.
+- Subscribe/unsubscribe top-level item commands to `CanExecuteChanged`, sync `can-activate` and `command-blocked`, and update on `IsEnabled` changes. Status: completed.
+- Replace `IsLeftButtonPressed` pointer focus gating with `PointerUpdateKind.LeftButtonPressed`. Status: completed.
+- Extend behavior tests for command-blocked top-level links, keyboard suppression, stale viewport prevention, and command-state classes. Status: completed.
+- Add structure/Docs guards for `CanActivateLink`, command subscription, `command-blocked`, and command-blocked event matrix copy. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 130 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check` from `/data/CodexSwitch` and `/data/CodexSwitch/CodexSwitchUI`: passed.
+
+### Agent C128: NavigationMenu Content Link Primary Release Parity
+
+Status: completed for this NavigationMenu content-link parity slice. This pass moves `CodexNavigationMenuLink` from inline pointer-release activation to the same testable primary-release helper pattern as other Web-aligned interactive components, and fixes command-state class synchronization for content links.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexNavigationMenu.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+
+Evidence gathered:
+
+- `CodexNavigationMenuLink.OnPointerReleased` already checked `LeftButtonReleased`, but the gate was inline and not directly behavior-testable like top-level navigation items, menu leaves, badges, and items.
+- Content links did not subscribe to `Command.CanExecuteChanged`, so `can-activate` stayed stale when the host command became blocked or available again.
+- Docs described `Primary link` as a top-level link behavior only, leaving content-link pointer activation out of the visible event contract.
+
+Implementation targets:
+
+- Add `TryHandlePointerActivation(PointerUpdateKind updateKind)` to `CodexNavigationMenuLink` and route `OnPointerReleased` through it. Status: completed.
+- Add `CanActivate`, `command-blocked`, and `CanExecuteChanged` subscription/unsubscription for NavigationMenu content links. Status: completed.
+- Add behavior tests proving right/middle release do not activate content links, primary release activates, command blocking suppresses activation and updates classes, commandless links still emit `Activated`, and disabled links suppress activation. Status: completed.
+- Add structure guards so content links cannot regress to inline `PointerUpdateKind == LeftButtonReleased && TryActivate()` checks or stale command state. Status: completed.
+- Update NavigationMenu Docs page notes and event matrix so the primary-link contract covers content links too. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 130 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check` from `/data/CodexSwitch` and `/data/CodexSwitch/CodexSwitchUI`: passed.
+
+### Agent C127: Docs Manual Pointer Release Primary Contract
+
+Status: completed for this Docs sample-code parity slice. This pass removes remaining bare `PointerReleased += (_, _)` handlers from Docs preview code so expanded examples no longer demonstrate right/middle release activation for rows or interactive card surfaces.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+
+Evidence gathered:
+
+- `BuildTableInteractionPreview` selected rows from `PointerReleased += (_, _)`, so any pointer button release could update the selected row in the rendered sample and in the expanded source.
+- `BuildCardInteractionPreview` updated the interactive card from a bare pointer release handler.
+- `DataTablePaymentRow` used a bare pointer release handler for row activation in the DataTable sample.
+- These were Docs-local examples rather than component internals, but the user specifically requires expanded case code to model the current component contract.
+
+Implementation targets:
+
+- Add `SelectRowFromPointer(PointerReleasedEventArgs args, CodexTableRow row, string model)` and gate table row selection on `PointerUpdateKind.LeftButtonReleased`. Status: completed.
+- Gate interactive card and DataTable row sample handlers on `PointerUpdateKind.LeftButtonReleased` and mark accepted events handled. Status: completed.
+- Add a Docs static guard that rejects bare `PointerReleased += (_, _)` handlers and verifies the primary release checks remain in the sample code. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests"`: 17 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check` from `/data/CodexSwitch` and `/data/CodexSwitch/CodexSwitchUI`: passed.
+
+### Agent C126: Badge Primary Pointer Activation Docs Parity
+
+Status: completed for this Feedback Badge event/docs slice. This pass makes the interactive/link badge activation path explicit in code and Docs: primary pointer release, Enter, and Space share the badge command/Activated contract, while right and middle button release are ignored.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexBadge.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+
+Evidence gathered:
+
+- `CodexBadge.OnPointerReleased` already checked for `LeftButtonReleased`, but the activation gate was inline and not directly testable like newer parity slices.
+- `CodexBadge.OnPointerPressed` still used the broader `IsLeftButtonPressed` button-state check for pointer focus instead of the same `PointerUpdateKind` contract used elsewhere.
+- The Badge Docs page had state/anatomy/interaction examples, but the event matrix did not expose the interactive/link badge primary pointer, keyboard, or `CanExecute` behavior.
+
+Implementation targets:
+
+- Add `TryHandlePointerActivation(PointerUpdateKind updateKind)` to centralize primary-release badge activation. Status: completed.
+- Route `OnPointerReleased` through the helper and switch pointer focus gating to `PointerUpdateKind.LeftButtonPressed`. Status: completed.
+- Add behavior tests proving right/middle release do not activate badges, primary release runs `Command` and `Activated`, and `CanExecute`/non-interactive states suppress activation. Status: completed.
+- Add structure guards so Badge activation cannot regress back to inline release checks or button-state press checks. Status: completed.
+- Update Badge Docs notes, interaction example copy, and event matrix with primary pointer, keyboard, `CanExecute`, and host status changes. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 76 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check` from `/data/CodexSwitch` and `/data/CodexSwitch/CodexSwitchUI`: passed.
+
+### Agent C125: Drawer Handle Primary Pointer Drag Parity
+
+Status: completed for this Drawer event-parity slice. This pass aligns `CodexDrawer` handle dragging with the Web/Vaul primary-pointer gesture contract: right and middle button press/release no longer begin or complete a handle drag, while programmatic drag APIs stay available for docs and host-driven examples.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDrawer.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/OverlayFeedbackComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+
+Evidence gathered:
+
+- `CodexDrawer.OnHandlePointerPressed` only checked `IsLeftButtonPressed`, while `OnHandlePointerReleased` completed the drag for any captured release without checking `PointerUpdateKind`.
+- This left the release half of the gesture less strict than Web pointer/click semantics and could let right or middle release complete a drag-dismiss flow.
+- Docs described the Drawer gesture generically as `Handle drag` / `Drag release`, so the visible contract did not say the gesture is primary-pointer owned.
+- Existing Docs inline examples already render the component first and reveal the matching local AXAML source under each case, so this slice only needed to refresh the Drawer gesture wording.
+
+Implementation targets:
+
+- Add `TryBeginHandleDrag(PointerUpdateKind updateKind, Point startPoint, IPointer? pointer = null)` and gate handle drag start on `PointerUpdateKind.LeftButtonPressed`. Status: completed.
+- Add `TryCompleteHandleDrag(PointerUpdateKind updateKind, IPointer? pointer = null)` and gate handle drag completion on `PointerUpdateKind.LeftButtonReleased`. Status: completed.
+- Keep public `BeginDrag`, `DragBy`, and `CompleteDrag` behavior intact for programmatic examples and tests. Status: completed.
+- Update Drawer Docs page notes, example copy, and event matrix to call out `Primary handle drag` and `Primary drag release`. Status: completed.
+- Add behavior tests proving right/middle press do not start drag, right/middle release do not complete drag, primary release completes dismissal, and disabled/closed/hidden-handle states suppress start. Status: completed.
+- Add structure guards so Drawer handle drag cannot regress back to generic button state checks or unconditional release completion. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~OverlayFeedbackComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 74 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check` from `/data/CodexSwitch` and `/data/CodexSwitch/CodexSwitchUI`: passed.
+
+### Agent C124: NavigationMenu Top-Level Link Primary Release Parity
+
+Status: completed for this Navigation event-parity slice. This pass aligns `CodexNavigationMenuItem` top-level link activation with the Web link/button contract: pointer press only handles pointer focus, while command activation waits for primary pointer release.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexNavigationMenu.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- `CodexNavigationMenuItem.OnPointerPressed` previously checked `IsLeftButtonPressed`, focused the item, then immediately called `TryActivateLink()` or `Activate()`.
+- For top-level link items with no viewport content, that meant command execution and `Activated` fired on press-down rather than primary release/click completion.
+- `CodexNavigationMenuLink` content links already use `PointerUpdateKind.LeftButtonReleased`, so the top-level item path was the remaining navigation-menu inconsistency.
+- Docs described navigation-menu pointer behavior generically as pointer activation and did not distinguish pointer-enter viewport disclosure from primary-release link activation.
+
+Implementation targets:
+
+- Add `TryHandlePointerRelease(PointerUpdateKind updateKind, CodexNavigationMenu? owner = null)` to `CodexNavigationMenuItem`. Status: completed.
+- Gate top-level pointer activation on `PointerUpdateKind.LeftButtonReleased` and `IsEnabled`. Status: completed.
+- Keep `OnPointerPressed` limited to pointer focus and focus-visible suppression. Status: completed.
+- Preserve pointer-enter viewport disclosure and keyboard Enter/Space activation. Status: completed.
+- Update Navigation Menu Docs notes, example copy, and event matrix to call out pointer-enter viewport activation plus primary-release link activation. Status: completed.
+- Add behavior tests proving right/middle release do not execute top-level link commands, primary release executes and closes the viewport, content items open on primary release, and disabled items suppress release handling. Status: completed.
+- Add structure guards so top-level navigation-menu command activation cannot regress back to pointer press. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 125 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check`: passed.
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`: passed.
+
+### Agent C123: Resizable Primary Pointer Drag Parity
+
+Status: completed for this Layout event-parity slice. This pass aligns `CodexResizableHandle` drag activation with the Web resizable-panel contract: only the primary pointer can enter handle dragging, and only the primary pointer release can end that drag.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexResizable.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+
+Evidence gathered:
+
+- `CodexResizableHandle.OnPointerPressed` previously called `owner.BeginResize(this)`, captured the pointer, and set dragging without checking `PointerUpdateKind`.
+- `OnPointerReleased` ended resizing and cleared capture for every pointer release, so secondary or middle-button input could mutate the active dragging state.
+- Docs described the Resizable interaction as generic pointer drag even though the Web interaction is primary pointer drag plus keyboard resize.
+
+Implementation targets:
+
+- Make `CodexResizablePanelGroup.BeginResize` and `EndResize` return whether the state transition ran. Status: completed.
+- Add `TryBeginResize(PointerUpdateKind updateKind, Point startPoint, CodexResizablePanelGroup? owner = null)` and gate dragging on `PointerUpdateKind.LeftButtonPressed && IsEnabled`. Status: completed.
+- Add `TryEndResize(PointerUpdateKind updateKind, CodexResizablePanelGroup? owner = null)` and gate drag completion on `PointerUpdateKind.LeftButtonReleased`. Status: completed.
+- Keep keyboard resize unchanged through `TryHandleResizeKey`. Status: completed.
+- Update Resizable Docs notes, example copy, state matrix, and event matrix from generic pointer drag to `Primary drag`. Status: completed.
+- Add behavior tests proving right/middle pointer paths do not start or end dragging, primary release clears group/handle dragging, and disabled handles reject primary drag start. Status: completed.
+- Add structure guards for the primary pointer helper path. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 123 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check`: passed.
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`: passed.
+
+### Agent C122: Slider Primary Pointer Drag Commit Parity
+
+Status: completed for this Forms event-parity slice. This pass aligns `CodexSlider` pointer dragging with the Web range-input contract: only the primary pointer can begin the drag state, and only the primary pointer release can commit `source=pointer`.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexSlider.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- `CodexSlider.OnPointerPressed` previously set `_isPointerChanging = IsEnabled` and invoked the native Slider pointer path without checking `PointerUpdateKind`.
+- That meant secondary or middle pointer presses could expose the `dragging` state and enter the value-change path, which does not match the Web primary-pointer range interaction.
+- Docs already expose the Slider page as four inline expandable examples; the visible event contract needed to say `Primary drag` rather than generic pointer drag.
+
+Implementation targets:
+
+- Add `TryBeginPointerChange(PointerUpdateKind updateKind)` and gate dragging on `PointerUpdateKind.LeftButtonPressed && IsEnabled`. Status: completed.
+- Add `TryCommitPointerValue(PointerUpdateKind updateKind)` and gate pointer commits on `PointerUpdateKind.LeftButtonReleased`. Status: completed.
+- Keep focus loss cleanup through the existing pointer commit path so active drags cannot strand the `dragging` class. Status: completed.
+- Update Slider Docs behavior notes, example copy, state matrix, and event matrix from generic pointer drag to primary pointer drag. Status: completed.
+- Add behavior tests proving right/middle pointer paths do not start or commit dragging, primary release clears dragging and commits `source=pointer`, and disabled sliders reject primary drag start. Status: completed.
+- Add structure guards for the primary pointer helper path. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 82 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `git diff --check`: passed.
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`: passed.
+
+### Agent C121: ProviderCard Drag Selection Suppression Parity
+
+Status: completed for this Data Display event-parity slice. This pass aligns `CodexProviderCard` selection with the documented Web-style provider-row contract: primary click can select a provider, but dragging and disabled states suppress selection and command activation.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexProviderCard.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ControlStateTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- `CodexProviderCard.OnClick` always called `SelectSiblingCards()` after `base.OnClick()`, so `IsDragging` was purely visual and could still select the dragged card if a click was raised.
+- Docs already stated that drag state applies visual feedback without selecting another card, but the component code did not enforce that contract.
+- Provider-card rows are Button-derived and may carry a command, so drag suppression needs to prevent both sibling active-state mutation and command activation.
+
+Implementation targets:
+
+- Add `TrySelect()` and `CanSelect()` to `CodexProviderCard`. Status: completed.
+- Gate selection on `IsEnabled && !IsDragging`. Status: completed.
+- Update `OnClick()` so dragging/disabled cards return before Button command/click execution and before sibling selection. Status: completed.
+- Update the Docs `data.provider-card` event matrix from generic pointer release to `Primary pointer`, and clarify that drag state suppresses selection and command activation. Status: completed.
+- Add behavior tests proving dragging and disabled cards do not select, do not clear the active sibling, and do not execute commands, while leaving normal `TrySelect()` selection intact. Status: completed.
+- Add structure guards for the new selection gate. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~ControlStateTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 67 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`: 246 passed.
+- `git diff --check`: passed.
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`: passed.
+
+### Agent C120: DatePicker Calendar Primary Pointer Sync Parity
+
+Status: completed for this Forms event-parity slice. This pass tightens the `CodexDatePicker` embedded-calendar pointer path so the picker only syncs and close-on-selects after a primary calendar pointer release, matching Web date-picker day-button behavior.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexDatePicker.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/FormComponentDetailTests.cs`
+
+Evidence gathered:
+
+- `CodexDatePicker` listened to `_calendar.PointerReleased` and called `SyncFromCalendar()` for every pointer release, without checking `PointerUpdateKind`.
+- With an existing selected date or completed range, a secondary or middle-button release inside the calendar could close the popover through `CloseOnSelect` even though no Web-style primary day selection happened.
+- Docs still described Calendar and Date Picker day selection as generic pointer day selection, while recent trigger and row passes have moved visible contracts to primary pointer wording.
+
+Implementation targets:
+
+- Add `TryHandleCalendarPointerRelease(PointerUpdateKind updateKind, CodexCalendar? calendar = null)` to `CodexDatePicker`. Status: completed.
+- Gate calendar sync on `PointerUpdateKind.LeftButtonReleased`, `!IsLoading`, and `IsEnabled`. Status: completed.
+- Make `SyncFromCalendar` return whether sync ran, and keep range close-on-select behavior only after a primary release completes the range. Status: completed.
+- Update Docs event matrix labels for Calendar and Date Picker day selection to `Primary day`. Status: completed.
+- Add behavior tests proving right/middle release do not sync or close, primary release syncs and closes single-date selection, loading blocks sync, and range mode closes only after a primary release completes the range. Status: completed.
+- Add a structure guard so the embedded calendar pointer path keeps the primary-release and loading/disabled gate. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~FormComponentDetailTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 81 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`: 245 passed.
+- `git diff --check`: passed.
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`: passed.
+
+### Agent C119: Item Row Primary Pointer Activation Parity
+
+Status: completed for this Data Display event-parity slice. This pass aligns `CodexItem` row activation with the Web item/list-row contract: only primary pointer release activates an interactive row, secondary/middle release do not run commands, and nested interactive slots do not accidentally activate the parent row.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexItem.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- `CodexItem.OnPointerReleased` previously called `TryActivate()` after any unhandled pointer release without checking `PointerUpdateKind`.
+- Docs described the row activation as generic pointer release, while recent overlay, disclosure, menubar, menu, and context-menu passes have moved visible contracts to primary pointer activation.
+- Data Display rows often host nested actions such as buttons, badges, selects, sliders, or menus; Web-style row composition must let those child controls keep their own activation path without mutating the parent row.
+
+Implementation targets:
+
+- Add `TryHandlePointerActivation(PointerUpdateKind updateKind, object? source = null)` to `CodexItem`. Status: completed.
+- Gate row activation on `PointerUpdateKind.LeftButtonReleased` plus the existing interactive/loading/disabled/command `CanExecute` guard. Status: completed.
+- Expand nested activation suppression to inspect visual and logical ancestors for `Button`, `ToggleButton`, `TextBox`, `ComboBox`, `Slider`, `MenuItem`, and `CodexBadge` before activating the row. Status: completed.
+- Update the Docs `data.item` event matrix from generic `Pointer released` to `Primary pointer`. Status: completed.
+- Add behavior tests covering right, middle, primary, loading, and nested action source cases. Status: completed.
+- Add structure guards so the primary-pointer gate and nested interactive source checks remain part of the Data Display row contract. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`: 121 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`: 3 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`: 1 passed.
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`: 242 passed.
+- `git diff --check`: passed.
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`: passed.
+
+### Agent C118: Menu Leaf Primary Pointer Selection Parity
+
+Status: completed for this event-parity pass. This slice tightens `CodexMenuItem` and `CodexContextMenuItem` so leaf selection mirrors the Web menu item contract: only primary pointer release enters the pointer-selection path, while right and middle release do not select, run commands, or close submenu chains.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexMenu.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexContextMenu.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/NavigationDataComponentTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- Web menu item selection is primary-pointer activation, while secondary/middle pointer release should not trigger `onSelect` behavior.
+- Existing Docs event matrices already moved overlay, disclosure, and menubar trigger wording to primary-trigger language; menu/context-menu leaf items still said generic pointer release.
+- Current Avalonia overrides set the pending pointer selection source before calling `base.OnPointerReleased(e)` without checking `PointerUpdateKind`, leaving non-primary releases too close to the selection path.
+
+Implementation targets:
+
+- Add `TryHandlePointerSelection(PointerUpdateKind updateKind)` to `CodexMenuItem` and `CodexContextMenuItem`. Status: completed.
+- Gate pointer selection on `PointerUpdateKind.LeftButtonReleased` plus the existing disabled/loading/command `CanExecute` activation guard. Status: completed.
+- Preserve blocked activation handling by marking disabled/loading/command-blocked pointer release handled while ignoring non-primary releases. Status: completed.
+- Update Docs event matrix wording for Menu and Context menu to `Primary pointer`. Status: completed.
+- Add behavior tests for right, middle, left, and loading cases on both menu and context-menu leaf items, including pointer source metadata and close-on-select propagation. Status: completed.
+- Add structure tests that reject unguarded pending pointer selection in both controls. Status: completed.
+
+Verification:
+
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~NavigationDataComponentTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C109: Radio Switch Toggle Slider Anatomy Docs And Chrome Guard
+
+Status: completed for this Forms Docs parity pass. This slice brings the remaining standalone choice/toggle/range form pages up to the four-case Docs pattern by adding anatomy cases under each component, while keeping the local `Show code` / `Hide code` AXAML expansion directly beneath the rendered case.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/RadioAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/SwitchAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/ToggleAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/SliderAnatomy.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+
+Evidence gathered:
+
+- The Docs preview contract already renders each example before its own local inline source toggle, so each new anatomy sample needed an independent AXAML file and `DocsExampleCase` registration rather than a right-rail-only source view.
+- `CodexRadio`, `CodexSwitch`, `CodexToggle`, and `CodexSlider` already own Web-style focus-visible suppression, checked/pressed/value events, tokenized motion, and component templates. The missing Docs coverage was anatomy-level demonstration of template parts and event/state surfaces.
+- Default Avalonia/Fluent style drift remains a risk for native-derived controls, so this slice adds a focused guard over Radio, Switch, Toggle, and Slider template parts, event paths, tokenized motion, disabled opacity, and absence of `BasedOn`/Fluent references.
+
+Implementation targets:
+
+- Add `RadioAnatomy.axaml` and `BuildRadioAnatomyPreview` covering ring, dot, label target, group name, size, intent, checked, and disabled cases. Status: completed.
+- Add `SwitchAnatomy.axaml` and `BuildSwitchAnatomyPreview` covering track, thumb, optional content, checked motion, size, intent, and disabled cases. Status: completed.
+- Add `ToggleAnatomy.axaml` and `BuildToggleAnatomyPreview` covering root, content, focus ring, pressed classes, variants, icon size, and disabled guard. Status: completed.
+- Add `SliderAnatomy.axaml` and `BuildSliderAnatomyPreview` covering slider root, track background, fill, invisible hit buttons, thumb, vertical orientation, boundary classes, and disabled guard. Status: completed.
+- Extend Docs registration tests and component chrome/event guards. Status: completed.
+- Refresh Docs visual fingerprints after expanded inline-code rendering changed the affected pages. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~FormComponentDetailTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+Coverage audit:
+
+- `TOTAL_LT4 24`
+- Forms pages with fewer than four cases from the previous audit (`forms.radio`, `forms.switch`, `forms.toggle`, and `forms.slider`) are now removed from the under-covered list.
+
+### Agent C110: Navigation Anatomy Docs And Native Chrome Guard
+
+Status: completed for this Navigation Docs parity pass. This slice brings the remaining under-covered Navigation pages up to the four-case Docs pattern by adding independent anatomy examples that still render their own `Show code` / `Hide code` AXAML directly beneath the component preview.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/SideNavAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/SegmentedControlAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/DropdownButtonAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/CollapsibleAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/SeparatorAnatomy.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+
+Evidence gathered:
+
+- `navigation.side-nav`, `navigation.segmented-control`, `navigation.dropdown`, `navigation.collapsible`, and `navigation.separator` each had default/state/interaction coverage but only three local cases.
+- Existing controls already expose the Web-style contracts needed for these anatomy pages: side-nav root `SelectedValue`, segmented moving indicator metrics, dropdown light-dismiss/open/focus-return surface, collapsible measured height animation, and separator orientation/size classes.
+- Native/default style drift is most likely around Button-derived navigation rows, dropdown popup trigger chrome, and templated disclosure controls, so this slice adds a guard that checks template parts, event paths, tokenized motion, and absence of Fluent/BasedOn references across the relevant styles.
+
+Implementation targets:
+
+- Add `SideNavAnatomy.axaml` and `BuildSideNavAnatomyPreview` for root selected value, item values, icon/detail slots, selected row, and disabled row. Status: completed.
+- Add `SegmentedControlAnatomy.axaml` and `BuildSegmentedControlAnatomyPreview` for indicator host, selected segment metrics, value fallback, disabled segment, and remeasure motion. Status: completed.
+- Add `DropdownButtonAnatomy.axaml` and `BuildDropdownAnatomyPreview` for trigger, chevron, popup, surface, arrow, content presenter, alignment, close-on-select, and loading guard. Status: completed.
+- Add `CollapsibleAnatomy.axaml` and `BuildCollapsibleAnatomyPreview` for trigger, rich header slot, chevron, content clip, measured content, animation duration, and disabled closed state. Status: completed.
+- Add `SeparatorAnatomy.axaml` and `BuildSeparatorAnatomyPreview` for `PART_Line`, horizontal/vertical orientation, density sizes, toolbar dividers, and decorative composition. Status: completed.
+- Extend Docs registration tests and Navigation native chrome/style guards. Status: completed.
+- Refresh Docs visual fingerprints after expanded inline-code rendering changed these Navigation pages. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~NavigationDataComponentTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+Coverage audit:
+
+- `TOTAL_LT4 19`
+- Navigation pages with fewer than four cases from the previous audit (`navigation.side-nav`, `navigation.segmented-control`, `navigation.dropdown`, `navigation.collapsible`, and `navigation.separator`) are now removed from the under-covered list.
+
+### Agent C105: Feedback Loading Anatomy Docs And Style Leak Guard
+
+Status: completed for this Docs coverage and fidelity slice. This pass focuses on feedback loading primitives where default Avalonia `ProgressBar` chrome or under-documented runtime animation behavior can drift from the Web/shadcn effect.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/SpinnerAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/ProgressAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/SkeletonAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- Docs already render each `DocsExampleCase` before its local `Show code` / `Hide code` button via `BuildInlineExample`, so adding standalone AXAML files automatically places the exact sample code below the rendered loading component case.
+- Spinner, Progress, and Skeleton had default/state/interaction coverage, but no independent anatomy page showing template parts, runtime motion knobs, semantic tone, and reduced-motion fallback.
+- `CodexProgress` inherits Avalonia `ProgressBar`, so it needs explicit guards for owned template, zero border/padding, null focus adorner, and Codex indeterminate segment to prevent Fluent/default chrome leakage.
+
+Implementation targets:
+
+- Add Spinner anatomy Docs case with spoke/stroke sizing, semantic foreground, live label, paused state, and non-interactive composition. Status: completed.
+- Add Progress anatomy Docs case with track, indicator, progress text, semantic variants, large/small sizes, indeterminate segment, and zero-duration reduced-motion frame. Status: completed.
+- Add Skeleton anatomy Docs case with text/media placeholders, pulse opacity, shimmer layer, rounded blocks, static fallback, and local inline code reveal. Status: completed.
+- Register all three anatomy cases in `ExampleCasesFor` so each page now has a richer Default/States/Anatomy/Interaction sequence. Status: completed.
+- Add tests covering the new Docs sample registration plus loading-component native style leak guards. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~MotionRenderedLifecycleTests|FullyQualifiedName~OverlayFeedbackComponentTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+- `git diff --check`
+- `git -C /data/CodexSwitch/CodexSwitchUI diff --check`
+
+### Agent C106: Feedback Surface Anatomy Docs And Scoped Chrome Guard
+
+Status: completed for this Docs coverage and style-fidelity slice. This pass completes the remaining Feedback pages that still had only default/state/interaction examples and adds a scoped chrome guard for empty-state action buttons and Sonner close-button policy.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/EmptyStateAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/SonnerAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- The current Docs shell already guarantees local inline source disclosure through `BuildInlineExample`, so adding independent AXAML files under each registered case keeps the code reveal directly beneath the rendered component.
+- `feedback.empty-state` and `feedback.sonner` were the only remaining Feedback pages below four cases after C105; both lacked an anatomy example that shows slot composition and host chrome.
+- `CodexEmptyState` owns `PART_Action` and `PART_SecondaryAction` through `CodexButton`, while `CodexSonner` scopes close-button visibility through `CodexToast /template/ Button#PART_Close`; these are the style fidelity points that can drift if native Button defaults leak in.
+
+Implementation targets:
+
+- Add Empty State anatomy Docs case with icon shell, header, helper text, content slot, primary action, secondary action, size, and semantic variant examples. Status: completed.
+- Add Sonner anatomy Docs case with expanded rich viewport, compact close policy, animated host rows, visible count, offset, action/cancel slots, and close visibility examples. Status: completed.
+- Register both anatomy cases in `ExampleCasesFor` so the Feedback category has complete per-case source expansion coverage. Status: completed.
+- Add Docs registration assertions and scoped chrome tests for Empty State actions plus Sonner/Toast close-button templates. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~OverlayFeedbackComponentTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+
 ### Agent C102: Switch And Toggle Checked/Pressed Event Parity
 
 Status: completed for this Web event parity and Docs interaction slice. This slice keeps the existing per-case Docs code expansion model intact while making Switch and standalone Toggle expose explicit Web-style checked/pressed change events.
@@ -1900,6 +4983,123 @@ Verification:
 - `npm run lint` in `docs-site`
 - `npm run build` in `docs-site`
 - `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+
+### Agent C107: Text Input Anatomy Docs And Default Style Guard
+
+Status: completed for this Forms Docs coverage and input-style fidelity slice. This pass completes the TextBox and Textarea Docs pages with Anatomy examples and strengthens guards around native Avalonia text input chrome.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/TextBoxAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/TextareaAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- `forms.textbox` and `forms.textarea` were still below four Docs cases after the Feedback passes, and neither page had a dedicated anatomy sample for the owned input template parts.
+- Both controls inherit from Avalonia `TextBox`, so Web parity depends on replacing the default presenter chrome with Codex-owned `PART_BorderElement`, `PART_ScrollViewer`, `PART_Placeholder`, `PART_TextPresenter`, selection/caret resources, and focus-visible ring behavior.
+- The existing Docs inline example path already renders the case first and places the local sample code under the component via `BuildInlineExample`, so adding registered AXAML files keeps the code reveal requirement intact.
+
+Implementation targets:
+
+- Add TextBox anatomy Docs case covering placeholder, presenter, inline left/right slots, selection, caret, intent, and size examples. Status: completed.
+- Add Textarea anatomy Docs case covering multiline wrapping, placeholder, scroll viewer, selection, caret, tall layout, and semantic intent examples. Status: completed.
+- Register both cases in `ExampleCasesFor` and assert their independent sample registration in Docs tests. Status: completed.
+- Add text-input template guard checks for owned presenter/placeholder/focus chrome and against default Avalonia/Fluent parts such as content host, watermark, or BasedOn defaults. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~FormComponentDetailTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+
+### Agent C108: Icon And Split Button Anatomy Docs And Chrome Guard
+
+Status: completed for this Forms Docs coverage and button chrome fidelity slice. This pass completes the Icon Button and Split Button Docs pages with Anatomy examples and locks down their Codex-owned button and popup chrome.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/IconButtonAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Forms/SplitButtonAnatomy.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/DocsPanelLayoutTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/ComponentStructureTests.cs`
+
+Evidence gathered:
+
+- `forms.icon-button` and `forms.split-button` were still below four Docs cases after the text-input pass, and neither page had a dedicated anatomy sample for inherited button chrome or split popup parts.
+- `CodexIconButton` intentionally derives from `CodexButton`, sets `Size=Icon`, and adds a `round` class; Web parity depends on retaining the CodexButton template instead of introducing a separate default Button template path.
+- `CodexSplitButton` composes `PART_PrimaryAction` and `PART_MenuTrigger` as `CodexButton` children plus owned divider, chevron, popup surface, arrow, alignment, and open/closed motion classes.
+
+Implementation targets:
+
+- Add Icon Button anatomy Docs case covering icon-sized chrome, round geometry, loading slot, semantic variants, disabled state, and toolbar rhythm. Status: completed.
+- Add Split Button anatomy Docs case covering primary action, menu trigger, divider, chevron, popup surface, arrow visibility, alignment, loading/disabled, and close policy. Status: completed.
+- Register both cases in `ExampleCasesFor` and assert their independent sample registration in Docs tests. Status: completed.
+- Add chrome guard checks proving IconButton inherits CodexButton geometry and SplitButton uses scoped CodexButton children plus tokenized popup motion rather than raw/default Button styling. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsPanelLayoutTests|FullyQualifiedName~ComponentStructureTests|FullyQualifiedName~FormComponentDetailTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+
+### Agent C104: Menu ItemSelected OnSelect Metadata
+
+Status: completed for this Navigation event-parity slice. This pass adds Web `onSelect`-style leaf-selection metadata for Menu, Context Menu, and Menubar item paths while keeping submenu triggers as disclosure controls instead of select events.
+
+Scope:
+
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexMenu.cs`
+- `CodexSwitchUI/src/CodexSwitchUI/Controls/CodexContextMenu.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/MenuInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/ContextMenuInteraction.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Navigation/MenubarInteraction.axaml`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/MenuRenderedLifecycleTests.cs`
+- `CodexSwitchUI/tests/CodexSwitchUI.Tests/Snapshots/DocsVisualFingerprints.json`
+- `docs-site/content/docs/en/ui-system/navigation.mdx`
+- `docs-site/content/docs/zh/ui-system/navigation.mdx`
+
+Evidence gathered:
+
+- Radix Dropdown Menu, Context Menu, and Menubar expose leaf item selection through item `onSelect` while checkbox/radio items keep checked state and submenu triggers remain disclosure controls.
+- Local menu controls already owned active, disabled, loading, submenu open/close, shortcut, checkbox, radio, and close-on-select behavior, but hosts had no typed selected-item event metadata for source, checked/radio state, command parameter, or whether close-on-select actually dismissed a surface.
+- Avalonia can raise click after key handling, so source tracking must survive dispatcher-posted keyboard click delivery instead of clearing at the end of `OnKeyDown`.
+- Docs already renders Menu, Context Menu, and Menubar interaction cases before local AXAML source toggles, so the interaction text was enriched without changing the per-case code reveal model.
+
+Implementation targets:
+
+- Add `CodexMenuItemSelectSource` with `Programmatic`, `Pointer`, and `Keyboard`. Status: completed.
+- Add `CodexMenuItemSelectedEventArgs` with selected item, header, command parameter, toggle type, checked state, submenu state, source, and close-on-select result. Status: completed.
+- Add `ItemSelected` to `CodexMenuItem` and `CodexContextMenuItem`; Menubar leaf items inherit the same event contract from `CodexMenuItem`. Status: completed.
+- Track pointer and keyboard activation source across Avalonia's deferred click delivery, and emit selection only for leaf items. Status: completed.
+- Add rendered lifecycle tests proving Menu, Context Menu, and Menubar leaf selection metadata, keyboard source, checkbox state, command parameter, submenu non-selection, and close-on-select behavior. Status: completed.
+- Update Docs notes, event matrix, Menu/ContextMenu/Menubar interaction previews, AXAML interaction samples, and docs-site Navigation EN/ZH pages. Status: completed.
+
+Verification:
+
+- `dotnet build src/CodexSwitchUI/CodexSwitchUI.csproj -f net10.0 --no-restore`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~MenuRenderedLifecycleTests`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~MenuRenderedLifecycleTests|FullyQualifiedName~DocsPanelLayoutTests"`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter "FullyQualifiedName~DocsMultiCaseExamplesExpandInlineCodeAndRenderAcrossThemes|FullyQualifiedName~DocsRepresentativePagesRenderScreenshotsAcrossThemes|FullyQualifiedName~DocsNavigationAndDarkThemeSwitchDoNotDetachAnimatedPageContent"`
+- `CODEXSWITCHUI_UPDATE_DOCS_VISUAL_SNAPSHOTS=1 dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore --filter FullyQualifiedName~DocsVisualFingerprintsMatchBaselineAcrossThemes`
+- `npm run lint` in `docs-site`
+- `npm run build` in `docs-site`
+- `dotnet test tests/CodexSwitchUI.Tests/CodexSwitchUI.Tests.csproj -f net10.0 --no-restore`
+
+Carry-forward style fidelity note:
+
+- Future visual/style slices should explicitly check for default Avalonia/Fluent style leakage in mounted templates, not only public API parity, because default paddings, focus chrome, popup offsets, and pressed/hover surfaces can make the actual rendered effect diverge from the Web target.
 
 ### Agent C81: Slider Web Value Events And Docs Visual Debug
 
@@ -4627,7 +7827,7 @@ Status: completed for the next dynamic Overlay/Feedback Docs pass. This slice ke
 Scope:
 
 - `CodexSwitchUI/src/CodexSwitchUI.Docs/MainWindow.cs`
-- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/SonnerLifecycle.axaml`
+- `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Feedback/SonnerInteraction.axaml`
 - `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Overlay/CommandDialogInteraction.axaml`
 - `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Overlay/TooltipInteraction.axaml`
 - `CodexSwitchUI/src/CodexSwitchUI.Docs/Examples/Axaml/Overlay/HoverCardInteraction.axaml`

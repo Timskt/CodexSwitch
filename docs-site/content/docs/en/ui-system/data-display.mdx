@@ -10,7 +10,8 @@ Data display components power provider lists, model catalogs, data-table workflo
 
 - Table
 - Data Table pattern for filtering, sorting, column visibility, row selection, actions, and pagination
-- Item for media/title/description rows, trailing actions, selected/loading/disabled states, groups, and separators
+- Item for media/title/description rows, trailing actions, selected/loading/disabled/command-blocked states, groups, and separators
+- Provider Card for active provider rows, drag suppression, command-blocked selection guards, usage/status/action slots, and tokenized hover motion
 - Aspect Ratio for fixed video, square, portrait, and bounded media slots with clipped content
 - Carousel
 - Chart composition for containers, legends, tooltip content, indicator styles, and refresh motion
@@ -24,11 +25,13 @@ Data display components power provider lists, model catalogs, data-table workflo
 - Separator
 - Typography
 
-Carousel coverage follows the Web composition path with selected-index state, previous/next commands, loop boundaries, horizontal and vertical orientation, keyboard navigation, status text, `SelectionChanged` source metadata, old/new item metadata, and per-example inline AXAML source in Docs.
+Carousel coverage follows the Web composition path with selected-index state, previous/next commands, deterministic `at-start` / `at-end` and `previous-disabled` / `next-disabled` boundary classes, loop boundaries, horizontal and vertical orientation, keyboard navigation, status text, `SelectionChanged` source metadata, old/new item metadata, and anatomy/state/composition/interaction cases with per-example inline AXAML source in Docs.
 
-Pagination coverage follows the Web page-navigation contract with boundary/sibling ellipses, current page state, first/previous/next/last commands, keyboard navigation, loading suppression, compact mode, and `PageChanged` source metadata for page item, action, keyboard, and programmatic changes.
+Pagination coverage follows the Web page-navigation contract with boundary/sibling ellipses, current page state, first/previous/next/last primary pointer actions, Enter/Space action activation, page-item command guards, keyboard navigation, loading suppression, compact mode, and `PageChanged` source metadata for page item, action, keyboard, and programmatic changes.
 
-Item coverage follows the Web row composition path with media, title, description, content, action, footer, group, separator, pointer activation, Enter/Space activation, command guards, and nested action slots.
+Item coverage follows the Web row composition path with media, title, description, content, action, footer, group, separator, pointer activation, Enter/Space activation, programmatic activation, command guards, and nested action slots. `Activated` reports pointer, keyboard, or programmatic source metadata, and `ActivateCommand.CanExecuteChanged` updates `can-activate` and `command-blocked` before an item can emit the event.
+
+Provider Card coverage follows the provider-row selection contract: only left-button pointer release, keyboard activation, or guarded programmatic selection clears sibling active cards, and only when enabled, not dragging, and the host command can execute; right/middle pointer releases are ignored. `Selected` reports pointer, keyboard, or programmatic source metadata, and `CanExecuteChanged` updates `can-select` and `command-blocked` classes before selection.
 
 Aspect Ratio coverage follows the shadcn ratio primitive with video, square, portrait, empty, width/height/contain fit modes, clipped content, pointer hover motion, RatioChanged events, and independent Docs examples whose AXAML expands below each rendered case.
 
